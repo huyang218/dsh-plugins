@@ -13,15 +13,30 @@
  * @module dsh-plugin-astock
  */
 
+import Schema from '@deepseek-ai/schemastery';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { fetchKline, fetchQuote, searchStocks, PERIOD_NAMES, normalizeCode } from './data.js';
-import { calculateAllIndicators, sma, ema, macd, rsi, kdj, boll, obv, williamsR, atr, dmi } from './indicators.js';
+import { calculateAllIndicators } from './indicators.js';
+import { toTsCode, tushareQuery } from './tushare.js';
 
 /** Cordis plugin name used by loader diagnostics. */
 const name = 'dsh-plugin-astock';
 
 /** Services required by this plugin. */
 const inject = ['tools', 'systemPrompt'];
+
+/**
+ * Plugin configuration. An empty tushareToken (the default) keeps the plugin
+ * EastMoney-only; providing one additionally registers astock_fundamentals.
+ */
+const Config = Schema.object({
+  tushareToken: Schema.string().default('').description(
+    'Tushare Pro API token (https://tushare.pro). Empty disables the astock_fundamentals tool.',
+  ),
+  tushareEndpoint: Schema.string().default('https://api.tushare.pro').description(
+    'Tushare Pro API endpoint.',
+  ),
+});
 
 /** Indicator option descriptions */
 const INDICATOR_OPTIONS = {
@@ -97,17 +112,15 @@ function formatIndicatorOutput(klines, indicators, options) {
     const row = [`日期: ${k.date}`];
     row.push(`  收盘: ${k.close.toFixed(2)}`);
     
-    // MA values
-    if (indicators.MA) {
-      const maVals = [];
-      for (const period of (options.maPeriods || [5, 10, 20, 30, 60])) {
-        const key = `MA${period}`;
-        if (indicators[key] && indicators[key][i] !== null) {
-          maVals.push(`MA${period}=${indicators[key][i].toFixed(2)}`);
-        }
+    // MA values (stored as individual MA<period> keys, no aggregate MA key)
+    const maVals = [];
+    for (const period of (options.maPeriods || [5, 10, 20, 30, 60])) {
+      const key = `MA${period}`;
+      if (indicators[key] && indicators[key][i] !== null) {
+        maVals.push(`MA${period}=${indicators[key][i].toFixed(2)}`);
       }
-      if (maVals.length > 0) row.push(`  ${maVals.join(' ')}`);
     }
+    if (maVals.length > 0) row.push(`  ${maVals.join(' ')}`);
     
     // MACD
     if (indicators.MACD && indicators.MACD.macd[i] !== null) {
@@ -343,9 +356,11 @@ function apply(ctx, config) {
           indicators: { type: 'object', additionalProperties: true },
         },
       },
-      render: (_args, value) => [{
+      render: (args, value) => [{
         type: 'text',
-        text: formatIndicatorOutput(value.klines, value.indicators, value._options || {}),
+        text: formatIndicatorOutput(value.klines, value.indicators, {
+          maPeriods: args.maPeriods || [5, 10, 20, 30, 60],
+        }),
       }],
       presentationMeta: (_args, value) => ({
         code: value.code,
@@ -393,7 +408,6 @@ function apply(ctx, config) {
         total: data.total,
         klines: data.klines,
         indicators,
-        _options: indicatorOptions,
       };
     },
     presentCall: (args) => ({
@@ -445,6 +459,8 @@ function apply(ctx, config) {
           low: { type: 'number' },
           price: { type: 'number' },
           preClose: { type: 'number' },
+          highLimit: { type: 'number' },
+          lowLimit: { type: 'number' },
           volume: { type: 'number' },
           amount: { type: 'number' },
           change: { type: 'number' },
@@ -467,6 +483,8 @@ function apply(ctx, config) {
         lines.push(`昨收价:   ${value.preClose?.toFixed(2) || 'N/A'}`);
         lines.push(`涨跌额:   ${value.change?.toFixed(2) || 'N/A'}`);
         lines.push(`涨跌幅:   ${value.changePct?.toFixed(2) || 'N/A'}%`);
+        if (value.highLimit) lines.push(`涨停价:   ${value.highLimit.toFixed(2)}`);
+        if (value.lowLimit) lines.push(`跌停价:   ${value.lowLimit.toFixed(2)}`);
         lines.push(`成交量:   ${value.volume ? (value.volume / 10000).toFixed(2) + '万手' : 'N/A'}`);
         lines.push(`成交额:   ${value.amount ? (value.amount / 100000000).toFixed(2) + '亿' : 'N/A'}`);
         if (value.turnoverRate) lines.push(`换手率:   ${value.turnoverRate.toFixed(2)}%`);
@@ -591,6 +609,160 @@ function apply(ctx, config) {
       };
     },
   }));
+
+  // ── Tool: astock_fundamentals (Tushare Pro; only when a token is configured) ──
+  if (config?.tushareToken) {
+    registerFundamentalsTool(ctx, config);
+  }
 }
 
-export { apply, name, inject };
+/** daily_basic fields requested from Tushare, in snake_case → canonical camelCase. */
+const FUNDAMENTAL_FIELDS = {
+  ts_code: 'tsCode',
+  trade_date: 'tradeDate',
+  close: 'close',
+  turnover_rate: 'turnoverRate',
+  volume_ratio: 'volumeRatio',
+  pe: 'pe',
+  pe_ttm: 'peTtm',
+  pb: 'pb',
+  ps: 'ps',
+  ps_ttm: 'psTtm',
+  dv_ratio: 'dvRatio',
+  dv_ttm: 'dvTtm',
+  total_mv: 'totalMv',
+  circ_mv: 'circMv',
+};
+
+/**
+ * Map one Tushare daily_basic row to the canonical value. Tushare uses null
+ * for missing metrics (e.g. pe for loss-making stocks); those fields are
+ * omitted so the value stays valid under the closed output schema.
+ * @param {Object} row - daily_basic row keyed by snake_case field names
+ * @returns {Object} Canonical fundamentals value
+ */
+function mapFundamentals(row) {
+  const value = {};
+  for (const [field, key] of Object.entries(FUNDAMENTAL_FIELDS)) {
+    const raw = row[field];
+    if (typeof raw === 'string' && raw !== '') value[key] = raw;
+    else if (Number.isFinite(raw)) value[key] = raw;
+  }
+  return value;
+}
+
+function formatFundamentalsOutput(value) {
+  const lines = [];
+  lines.push(`每日基本面指标 - ${value.tsCode} (${value.tradeDate})`);
+  lines.push('─'.repeat(40));
+  if (value.close !== undefined) lines.push(`收盘价:     ${value.close.toFixed(2)}`);
+  if (value.pe !== undefined) lines.push(`市盈率:     ${value.pe.toFixed(2)}`);
+  if (value.peTtm !== undefined) lines.push(`市盈率TTM:  ${value.peTtm.toFixed(2)}`);
+  if (value.pb !== undefined) lines.push(`市净率:     ${value.pb.toFixed(2)}`);
+  if (value.ps !== undefined) lines.push(`市销率:     ${value.ps.toFixed(2)}`);
+  if (value.psTtm !== undefined) lines.push(`市销率TTM:  ${value.psTtm.toFixed(2)}`);
+  if (value.dvRatio !== undefined) lines.push(`股息率:     ${value.dvRatio.toFixed(2)}%`);
+  if (value.dvTtm !== undefined) lines.push(`股息率TTM:  ${value.dvTtm.toFixed(2)}%`);
+  if (value.turnoverRate !== undefined) lines.push(`换手率:     ${value.turnoverRate.toFixed(2)}%`);
+  if (value.volumeRatio !== undefined) lines.push(`量比:       ${value.volumeRatio.toFixed(2)}`);
+  if (value.totalMv !== undefined) lines.push(`总市值:     ${(value.totalMv / 10000).toFixed(2)}亿`);
+  if (value.circMv !== undefined) lines.push(`流通市值:   ${(value.circMv / 10000).toFixed(2)}亿`);
+  return lines.join('\n');
+}
+
+/**
+ * Register the Tushare-backed fundamentals tool.
+ * @param {Object} ctx - Plugin context
+ * @param {Object} config - Validated plugin config with a non-empty tushareToken
+ */
+function registerFundamentalsTool(ctx, config) {
+  ctx.systemPrompt.section({
+    name: 'tool:astock_fundamentals',
+    order: 144,
+    text: 'Use the astock_fundamentals tool to get daily fundamental metrics for an A-share stock (PE, PE-TTM, PB, PS, dividend yield, turnover, market cap). Data comes from Tushare Pro.',
+  });
+
+  ctx.tools.register(defineTool({
+    name: 'astock_fundamentals',
+    description: 'Fetch daily fundamental metrics (PE, PE-TTM, PB, PS, dividend yield, market cap) for an A-share stock from Tushare Pro.',
+    parameters: {
+      code: {
+        type: 'string',
+        required: true,
+        description: 'Stock code, e.g., "600519", "000001", "600519.SH"',
+      },
+      tradeDate: {
+        type: 'string',
+        default: '',
+        description: 'Trade date in YYYYMMDD format. Leave empty for the latest trading day.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          tsCode: { type: 'string' },
+          tradeDate: { type: 'string' },
+          close: { type: 'number' },
+          turnoverRate: { type: 'number' },
+          volumeRatio: { type: 'number' },
+          pe: { type: 'number' },
+          peTtm: { type: 'number' },
+          pb: { type: 'number' },
+          ps: { type: 'number' },
+          psTtm: { type: 'number' },
+          dvRatio: { type: 'number' },
+          dvTtm: { type: 'number' },
+          totalMv: { type: 'number', description: 'Total market cap in 万元' },
+          circMv: { type: 'number', description: 'Circulating market cap in 万元' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: formatFundamentalsOutput(value) }],
+      presentationMeta: (_args, value) => ({
+        tsCode: value.tsCode,
+        tradeDate: value.tradeDate,
+        pe: value.pe,
+        pb: value.pb,
+      }),
+    },
+    timeoutMs: 30000,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const tsCode = toTsCode(args.code);
+      const params = { ts_code: tsCode, limit: 1 };
+      if (args.tradeDate) params.trade_date = args.tradeDate;
+      const rows = await tushareQuery({
+        endpoint: config.tushareEndpoint,
+        token: config.tushareToken,
+        apiName: 'daily_basic',
+        params,
+        fields: Object.keys(FUNDAMENTAL_FIELDS).join(','),
+        signal: exec.signal,
+      });
+      if (rows.length === 0) {
+        throw new Error(`No daily_basic data for ${tsCode}${args.tradeDate ? ` on ${args.tradeDate}` : ''}`);
+      }
+      return mapFundamentals(rows[0]);
+    },
+    presentCall: (args) => ({
+      card: 'generic',
+      title: `${args.code} 基本面`,
+      kind: 'stock-fundamentals',
+      rawInput: args.code,
+    }),
+    presentResult: (args, result) => {
+      if (result.isError) return undefined;
+      return {
+        card: 'generic',
+        title: `${result.tsCode || args.code} - 基本面`,
+        kind: 'stock-fundamentals',
+        tradeDate: result.tradeDate,
+        pe: result.pe,
+        pb: result.pb,
+      };
+    },
+  }));
+}
+
+export { apply, name, inject, Config };

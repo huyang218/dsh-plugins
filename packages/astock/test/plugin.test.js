@@ -27,6 +27,32 @@ test('exports the named plugin surface and no default export', () => {
   assert.equal(typeof plugin.apply, 'function')
 })
 
+test('Config schema fills defaults and keeps tushare disabled by default', () => {
+  const resolved = new plugin.Config()
+  assert.equal(resolved.tushareToken, '')
+  assert.equal(resolved.tushareEndpoint, 'https://api.tushare.pro')
+})
+
+test('astock_fundamentals registers only when a tushareToken is configured', () => {
+  const bare = fakeCtx()
+  plugin.apply(bare, new plugin.Config())
+  assert.ok(!bare._tools.some(t => t.name === 'astock_fundamentals'))
+
+  const withToken = fakeCtx()
+  plugin.apply(withToken, new plugin.Config({ tushareToken: 'tok' }))
+  const tool = withToken._tools.find(t => t.name === 'astock_fundamentals')
+  assert.ok(tool, 'fundamentals tool must register with a token')
+  assert.ok(withToken._sections.some(s => s.name === 'tool:astock_fundamentals'))
+
+  // Render is pure and omitted metrics (null from Tushare) must not break it.
+  const rendered = tool.output.render({}, {
+    tsCode: '600519.SH', tradeDate: '20260814', close: 1341.99, peTtm: 18.8, pb: 7.1,
+  })
+  assert.match(rendered[0].text, /600519\.SH/)
+  assert.match(rendered[0].text, /市盈率TTM/)
+  assert.ok(!rendered[0].text.includes('股息率'), 'absent metrics are not rendered')
+})
+
 test('apply registers all four tools with matching prompt sections', () => {
   const ctx = fakeCtx()
   plugin.apply(ctx, {})
@@ -61,6 +87,42 @@ test('astock_data render is a pure projection of the canonical value', () => {
   assert.match(rendered[0].text, /贵州茅台/)
   assert.match(rendered[0].text, /600519/)
   assert.match(rendered[0].text, /2026-08-14/)
+})
+
+test('astock_quote canonical value conforms to its closed output schema', async () => {
+  const ctx = fakeCtx()
+  plugin.apply(ctx, {})
+  const tool = ctx._tools.find(t => t.name === 'astock_quote')
+  const declared = Object.keys(tool.output.schema.properties)
+  // Every key mapQuote can emit must be declared: an undeclared key under
+  // additionalProperties:false turns the whole call into isError at runtime.
+  const { mapQuote } = await import('../lib/data.js')
+  const sample = mapQuote('600519', {
+    f58: 'x', f46: 1, f44: 1, f45: 1, f43: 1, f60: 1, f47: 1, f48: 1,
+    f51: 1, f52: 1, f169: 1, f170: 1, f168: 1, f171: 1, f162: 1, f116: 1, f117: 1,
+  })
+  for (const key of Object.keys(sample)) {
+    assert.ok(declared.includes(key), `quote returns undeclared key: ${key}`)
+  }
+})
+
+test('astock_indicators render needs only the canonical value and args', async () => {
+  const ctx = fakeCtx()
+  plugin.apply(ctx, {})
+  const tool = ctx._tools.find(t => t.name === 'astock_indicators')
+  const { calculateAllIndicators } = await import('../lib/indicators.js')
+  const klines = Array.from({ length: 70 }, (_, i) => ({
+    date: `d${i}`, open: 10 + i, high: 11 + i, low: 9 + i, close: 10.5 + i, volume: 1000,
+  }))
+  const value = {
+    code: '600519', name: 'x', period: 'daily', periodName: '日K线',
+    total: klines.length, klines, indicators: calculateAllIndicators(klines),
+  }
+  // The old implementation smuggled `_options` through the canonical value,
+  // which violated the closed schema; render must work without it.
+  const rendered = tool.output.render({}, value)
+  assert.match(rendered[0].text, /MA5=/)
+  assert.match(rendered[0].text, /MACD/)
 })
 
 test('astock_search render handles empty results', () => {

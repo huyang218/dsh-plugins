@@ -188,7 +188,7 @@ async function fetchQuote(code) {
   const params = new URLSearchParams({
     secid: secid,
     ut: '7eea3edcaed734bea9c758c1c0a6f0b3',
-    fields: 'f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f57,f58,f59,f60,f61,f62,f63,f64,f65,f116,f117,f167,f168,f169,f170,f171',
+    fields: 'f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f57,f58,f59,f60,f61,f62,f63,f64,f65,f116,f117,f162,f167,f168,f169,f170,f171',
   });
   
   const url = `https://push2.eastmoney.com/api/qt/stock/get?${params.toString()}`;
@@ -204,15 +204,24 @@ async function fetchQuote(code) {
     throw new Error(`No quote data found for stock code: ${code}`);
   }
   
-  const d = data.data;
-  
+  return mapQuote(code, data.data);
+}
+
+/**
+ * Map an EastMoney quote payload to the tool's canonical quote value.
+ * Pure function, exported for unit tests. EastMoney reports missing numbers
+ * as "-" (e.g. pe for loss-making stocks); arithmetic on those yields NaN,
+ * which is not lossless JSON — such fields are omitted so the value stays
+ * valid under the tool's closed (additionalProperties: false) output schema.
+ * @param {string} code - Normalized display stock code
+ * @param {Object} d - `data` object from the EastMoney quote API
+ * @returns {Object} Canonical quote value
+ */
+function mapQuote(code, d) {
   // EastMoney quote API returns prices in "cents" (分, i.e., 1/100 yuan)
   const priceDivisor = 100;
-  
-  return {
-    code: code,
-    name: d.f58 || '',
-    market: getMarketPrefix(code),
+
+  const numeric = {
     open: d.f46 / priceDivisor,
     high: d.f44 / priceDivisor,
     low: d.f45 / priceDivisor,
@@ -226,10 +235,21 @@ async function fetchQuote(code) {
     changePct: d.f170 / priceDivisor,
     turnoverRate: d.f168 / priceDivisor,
     amplitude: d.f171 / priceDivisor,
-    pe: d.f162,
+    pe: d.f162 / priceDivisor,
     totalMarketCap: d.f116,
     circulatingMarketCap: d.f117,
   };
+
+  const quote = {
+    code: code,
+    name: d.f58 || '',
+    market: getMarketPrefix(code),
+  };
+  for (const [key, value] of Object.entries(numeric)) {
+    const normalized = Object.is(value, -0) ? 0 : value;
+    if (Number.isFinite(normalized)) quote[key] = normalized;
+  }
+  return quote;
 }
 
 /**
@@ -272,6 +292,7 @@ async function searchStocks(keyword) {
 export {
   fetchKline,
   fetchQuote,
+  mapQuote,
   searchStocks,
   normalizeCode,
   getMarketPrefix,

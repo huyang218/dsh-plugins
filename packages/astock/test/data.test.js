@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeCode, PERIOD_NAMES } from '../lib/data.js'
+import { mapQuote, normalizeCode, PERIOD_NAMES } from '../lib/data.js'
 
 test('normalizeCode maps code prefixes to EastMoney market ids', () => {
   assert.equal(normalizeCode('600519'), '1.600519') // Shanghai
@@ -13,6 +13,36 @@ test('normalizeCode strips sh/sz/bj prefixes case-insensitively', () => {
   assert.equal(normalizeCode('sz000001'), '0.000001')
   assert.equal(normalizeCode('SH600000'), '1.600000')
   assert.equal(normalizeCode('bj430047'), '2.430047')
+})
+
+const FULL_QUOTE_PAYLOAD = {
+  f58: '贵州茅台', f46: 134000, f44: 135500, f45: 133000, f43: 134199,
+  f60: 133900, f47: 25000, f48: 3.5e9, f51: 147290, f52: 120510,
+  f169: 299, f170: 22, f168: 15, f171: 187, f162: 2150,
+  f116: 1.68e12, f117: 1.68e12,
+}
+
+test('mapQuote maps a full EastMoney payload with cent→yuan conversion', () => {
+  const q = mapQuote('600519', FULL_QUOTE_PAYLOAD)
+  assert.equal(q.name, '贵州茅台')
+  assert.equal(q.market, 'SH')
+  assert.equal(q.price, 1341.99)
+  assert.equal(q.highLimit, 1472.9)
+  assert.equal(q.lowLimit, 1205.1)
+  assert.equal(q.pe, 21.5)
+})
+
+test('mapQuote omits fields EastMoney reports as "-" instead of emitting NaN', () => {
+  // Loss-making / suspended stocks return "-" for pe and several prices.
+  const q = mapQuote('600519', { ...FULL_QUOTE_PAYLOAD, f162: '-', f43: '-', f171: '-' })
+  assert.ok(!('pe' in q), 'pe must be omitted, not NaN')
+  assert.ok(!('price' in q))
+  assert.ok(!('amplitude' in q))
+  for (const value of Object.values(q)) {
+    if (typeof value === 'number') {
+      assert.ok(Number.isFinite(value) && !Object.is(value, -0), `non-lossless number: ${value}`)
+    }
+  }
 })
 
 test('PERIOD_NAMES covers the periods the tools document', () => {
