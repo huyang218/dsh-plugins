@@ -13,7 +13,6 @@
  * @module dsh-plugin-astock
  */
 
-import z from '@deepseek-ai/schemastery';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { fetchKline, fetchQuote, searchStocks, PERIOD_NAMES, normalizeCode } from './data.js';
 import { calculateAllIndicators, sma, ema, macd, rsi, kdj, boll, obv, williamsR, atr, dmi } from './indicators.js';
