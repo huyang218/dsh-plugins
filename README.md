@@ -23,4 +23,5 @@ dsh plugin --profile web add ./packages/astock
 
 - 通用插件不出现客户专属逻辑;部署差异一律走 Config 字段或 Provider 缝。
 - object schema 必须显式声明 `additionalProperties`(dsh 工具 schema 编译器强制)。
+- 每个插件带 `test/*.test.js` 单元测试(Node 内置 `node --test`,零依赖);根 `npm test` 跑全部,单包 `npm test -w <包名>`。
 - 发布给客户前:补 `prepare` 脚本(git 直装场景)或发私有 npm。

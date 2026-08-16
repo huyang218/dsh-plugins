@@ -5,6 +5,9 @@
   "private": true,
   "type": "module",
   "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test 'test/*.test.js'"
+  },
   "files": [
     "lib",
     "cordis.patch.yml"

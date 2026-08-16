@@ -4,5 +4,8 @@
   "description": "DeepSeek Harness plugin monorepo: generic plugins under packages/, per-customer bundles under customers/.",
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test 'packages/*/test/*.test.js'"
+  }
 }
