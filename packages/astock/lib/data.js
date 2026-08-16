@@ -5,6 +5,8 @@
  * @module dsh-plugin-astock/data
  */
 
+import { assignFinite } from './value.js';
+
 /**
  * Stock market prefixes
  * 0 = Shenzhen (SZ)
@@ -240,16 +242,11 @@ function mapQuote(code, d) {
     circulatingMarketCap: d.f117,
   };
 
-  const quote = {
+  return assignFinite({
     code: code,
     name: d.f58 || '',
     market: getMarketPrefix(code),
-  };
-  for (const [key, value] of Object.entries(numeric)) {
-    const normalized = Object.is(value, -0) ? 0 : value;
-    if (Number.isFinite(normalized)) quote[key] = normalized;
-  }
-  return quote;
+  }, numeric);
 }
 
 /**

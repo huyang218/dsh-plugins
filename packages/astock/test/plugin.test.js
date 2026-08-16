@@ -33,6 +33,66 @@ test('Config schema fills defaults and keeps tushare disabled by default', () =>
   assert.equal(resolved.tushareEndpoint, 'https://api.tushare.pro')
 })
 
+test('astock_market_quotes registers without a token and renders a summary', () => {
+  const ctx = fakeCtx()
+  plugin.apply(ctx, new plugin.Config())
+  const tool = ctx._tools.find(t => t.name === 'astock_market_quotes')
+  assert.ok(tool, 'the whole-market sweep needs no Tushare token')
+  assert.ok(ctx._sections.some(s => s.name === 'tool:astock_market_quotes'))
+
+  // The renderer must summarize: thousands of rows must never reach the model
+  // as text — the canonical value carries them for Code Mode.
+  const stocks = Array.from({ length: 5000 }, (_, i) => ({
+    code: String(i).padStart(6, '0'), name: `股票${i}`, isSt: i % 100 === 0,
+    price: 10 + i / 1000, circulatingMarketCap: 6e9,
+  }))
+  const text = tool.output.render({}, { count: stocks.length, stocks })[0].text
+  assert.match(text, /5000 只股票/)
+  assert.ok(text.length < 800, `render must stay a summary, got ${text.length} chars`)
+  assert.ok(!text.includes('股票4999'), 'render must not enumerate the market')
+})
+
+test('astock_market_bars registers only with a token and clamps the window', async () => {
+  const bare = fakeCtx()
+  plugin.apply(bare, new plugin.Config())
+  assert.ok(!bare._tools.some(t => t.name === 'astock_market_bars'))
+
+  const ctx = fakeCtx()
+  plugin.apply(ctx, new plugin.Config({ tushareToken: 'tok', marketMaxDays: 5 }))
+  const tool = ctx._tools.find(t => t.name === 'astock_market_bars')
+  assert.ok(tool)
+
+  const requested = []
+  const real = globalThis.fetch
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body)
+    if (body.api_name === 'trade_cal') {
+      const days = ['20260728', '20260729', '20260730', '20260731', '20260803']
+      return new Response(JSON.stringify({ code: 0, data: { fields: ['cal_date'], items: days.map(d => [d]) } }))
+    }
+    requested.push(body.params.trade_date)
+    return new Response(JSON.stringify({
+      code: 0,
+      data: {
+        fields: ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'pct_chg', 'vol', 'amount'],
+        items: [['000001.SZ', body.params.trade_date, 11.5, 11.7, 11.44, 11.62, 11.5, 1, 10, 20]],
+      },
+    }))
+  }
+  try {
+    // 999 days requested, but marketMaxDays caps the window at 5.
+    const value = await tool.execute({ endDate: '20260803', days: 999 }, { signal: undefined })
+    assert.equal(value.tradeDates.length, 5)
+    assert.equal(requested.length, 5, 'one request per trading day, not per stock')
+    assert.equal(value.count, 5)
+    assert.equal(value.bars[0].code, '000001')
+    const text = tool.output.render({}, value)[0].text
+    assert.match(text, /1 只股票 × 5 个交易日/)
+  } finally {
+    globalThis.fetch = real
+  }
+})
+
 test('astock_fundamentals registers only when a tushareToken is configured', () => {
   const bare = fakeCtx()
   plugin.apply(bare, new plugin.Config())
@@ -53,16 +113,19 @@ test('astock_fundamentals registers only when a tushareToken is configured', () 
   assert.ok(!rendered[0].text.includes('股息率'), 'absent metrics are not rendered')
 })
 
-test('apply registers all four tools with matching prompt sections', () => {
+test('apply registers the token-free tools with matching prompt sections', () => {
   const ctx = fakeCtx()
   plugin.apply(ctx, {})
 
   const toolNames = ctx._tools.map(t => t.name).sort()
-  assert.deepEqual(toolNames, ['astock_data', 'astock_indicators', 'astock_quote', 'astock_search'])
+  assert.deepEqual(toolNames, [
+    'astock_data', 'astock_indicators', 'astock_market_quotes', 'astock_quote', 'astock_search',
+  ])
 
   const sectionNames = ctx._sections.map(s => s.name).sort()
   assert.deepEqual(sectionNames, [
-    'tool:astock_data', 'tool:astock_indicators', 'tool:astock_quote', 'tool:astock_search',
+    'tool:astock_data', 'tool:astock_indicators', 'tool:astock_market_quotes',
+    'tool:astock_quote', 'tool:astock_search',
   ])
 
   for (const tool of ctx._tools) {

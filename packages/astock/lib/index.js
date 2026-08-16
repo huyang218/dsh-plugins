@@ -17,7 +17,8 @@ import Schema from '@deepseek-ai/schemastery';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { fetchKline, fetchQuote, searchStocks, PERIOD_NAMES, normalizeCode } from './data.js';
 import { calculateAllIndicators } from './indicators.js';
-import { toTsCode, tushareQuery } from './tushare.js';
+import { toTsCode, tushareQuery, fetchTradeDates, fetchDailyByDate, mapWithConcurrency } from './tushare.js';
+import { fetchMarketQuotes } from './market.js';
 
 /** Cordis plugin name used by loader diagnostics. */
 const name = 'dsh-plugin-astock';
@@ -35,6 +36,18 @@ const Config = Schema.object({
   ),
   tushareEndpoint: Schema.string().default('https://api.tushare.pro').description(
     'Tushare Pro API endpoint.',
+  ),
+  marketPageSize: Schema.number().default(100).description(
+    'Rows per page when sweeping the whole-market snapshot.',
+  ),
+  marketPauseMs: Schema.number().default(120).description(
+    'Delay between whole-market snapshot pages; raise it if the data source throttles.',
+  ),
+  marketMaxDays: Schema.number().default(120).description(
+    'Upper bound on the trading-day window astock_market_bars may request.',
+  ),
+  marketConcurrency: Schema.number().default(4).description(
+    'Parallel per-day requests when fetching whole-market history.',
   ),
 });
 
@@ -610,10 +623,213 @@ function apply(ctx, config) {
     },
   }));
 
-  // ── Tool: astock_fundamentals (Tushare Pro; only when a token is configured) ──
+  // ── Tool: astock_market_quotes (whole-market sweep; no token needed) ──
+  registerMarketQuotesTool(ctx, config ?? {});
+
+  // ── Tushare-backed tools (only when a token is configured) ──
   if (config?.tushareToken) {
     registerFundamentalsTool(ctx, config);
+    registerMarketBarsTool(ctx, config);
   }
+}
+
+/**
+ * Register the whole-market snapshot tool.
+ *
+ * The canonical value is a plain array of rows, sized for Code Mode: a screen
+ * runs `const { stocks } = await tools.astock_market_quotes({})` and filters
+ * in JavaScript. The renderer therefore returns a summary — the model must
+ * never receive five thousand rows as text.
+ * @param {Object} ctx - Plugin context
+ * @param {Object} config - Validated plugin config
+ */
+function registerMarketQuotesTool(ctx, config) {
+  ctx.systemPrompt.section({
+    name: 'tool:astock_market_quotes',
+    order: 145,
+    text: 'Use the astock_market_quotes tool for questions about MANY A-share stocks at once ("which stocks …", screening by market cap / listing age / ST status / price move). It returns one realtime row per listed stock (code, name, isSt, price, changePct, market caps, listDate). In Code Mode, filter the returned array in JavaScript instead of calling per-stock tools in a loop.',
+  });
+
+  ctx.tools.register(defineTool({
+    name: 'astock_market_quotes',
+    description: 'Fetch a realtime snapshot of EVERY listed A-share stock (code, name, ST flag, price, change %, total/circulating market cap, listing date). Use this for market-wide screening instead of querying stocks one by one.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          count: { type: 'integer' },
+          stocks: {
+            type: 'array',
+            required: true,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                code: { type: 'string' },
+                name: { type: 'string' },
+                isSt: { type: 'boolean' },
+                price: { type: 'number' },
+                changePct: { type: 'number' },
+                totalMarketCap: { type: 'number', description: 'Total market cap in 元' },
+                circulatingMarketCap: { type: 'number', description: 'Circulating market cap in 元' },
+                listDate: { type: 'string', description: 'Listing date, YYYYMMDD' },
+              },
+            },
+          },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: formatMarketQuotesOutput(value) }],
+      presentationMeta: (_args, value) => ({ count: value.count }),
+    },
+    timeoutMs: 120000,
+    isConcurrencySafe: () => true,
+    async execute(_args, exec) {
+      const stocks = await fetchMarketQuotes({
+        pageSize: config.marketPageSize ?? 100,
+        pauseMs: config.marketPauseMs ?? 120,
+        signal: exec.signal,
+      });
+      return { count: stocks.length, stocks };
+    },
+    presentCall: () => ({ card: 'generic', title: '全市场行情快照', kind: 'stock-market' }),
+    presentResult: (_args, result) => (result.isError ? undefined : {
+      card: 'generic', title: `全市场行情快照 (${result.count} 只)`, kind: 'stock-market', count: result.count,
+    }),
+  }));
+}
+
+/** Model-facing summary: the rows themselves belong to the canonical value. */
+function formatMarketQuotesOutput(value) {
+  const stocks = value.stocks ?? [];
+  const st = stocks.filter(s => s.isSt).length;
+  const lines = [
+    `全市场快照:${value.count} 只股票(其中 ST/退市 ${st} 只)。`,
+    '每行含 code / name / isSt / price / changePct / totalMarketCap / circulatingMarketCap / listDate。',
+    '样例:',
+  ];
+  for (const stock of stocks.slice(0, 3)) {
+    lines.push(`  ${stock.code} ${stock.name} 价=${stock.price ?? 'N/A'} 流通市值=${
+      stock.circulatingMarketCap ? (stock.circulatingMarketCap / 1e8).toFixed(1) + '亿' : 'N/A'}`);
+  }
+  lines.push('筛选请在 Code Mode 中对返回数组做过滤,不要逐只调用工具。');
+  return lines.join('\n');
+}
+
+/**
+ * Register the whole-market history tool (Tushare `daily`, one request per
+ * trading day). Complexity is O(days), not O(stocks) — the per-stock path
+ * gets rate-limited long before a market-wide window finishes.
+ * @param {Object} ctx - Plugin context
+ * @param {Object} config - Validated plugin config with a non-empty tushareToken
+ */
+function registerMarketBarsTool(ctx, config) {
+  ctx.systemPrompt.section({
+    name: 'tool:astock_market_bars',
+    order: 146,
+    text: 'Use the astock_market_bars tool to get daily OHLC bars for EVERY A-share stock across a trailing window of trading days (from Tushare). It answers questions like "which stocks made their N-day low on date D". Bars are unadjusted (不复权). In Code Mode, group the returned array by code and compute in JavaScript.',
+  });
+
+  ctx.tools.register(defineTool({
+    name: 'astock_market_bars',
+    description: 'Fetch daily OHLC bars for EVERY listed A-share stock over a trailing window of trading days (unadjusted). Use for market-wide historical screening; one call covers the whole market.',
+    parameters: {
+      endDate: {
+        type: 'string',
+        required: true,
+        description: 'Inclusive end of the window, YYYYMMDD (e.g. "20260803"). Must be a trading day or earlier.',
+      },
+      days: {
+        type: 'number',
+        default: 40,
+        description: 'Number of trading days in the window, counting back from endDate.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          tradeDates: { type: 'array', required: true, items: { type: 'string' } },
+          count: { type: 'integer' },
+          bars: {
+            type: 'array',
+            required: true,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                code: { type: 'string' },
+                date: { type: 'string', description: 'Trading day, YYYYMMDD' },
+                open: { type: 'number' },
+                high: { type: 'number' },
+                low: { type: 'number' },
+                close: { type: 'number' },
+                preClose: { type: 'number' },
+                pctChg: { type: 'number' },
+                volume: { type: 'number', description: 'Volume in 手' },
+                amount: { type: 'number', description: 'Turnover in 千元' },
+              },
+            },
+          },
+        },
+      },
+      render: (args, value) => [{ type: 'text', text: formatMarketBarsOutput(args, value) }],
+      presentationMeta: (_args, value) => ({
+        count: value.count,
+        days: value.tradeDates.length,
+        from: value.tradeDates[0],
+        to: value.tradeDates[value.tradeDates.length - 1],
+      }),
+    },
+    timeoutMs: 300000,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const maxDays = config.marketMaxDays ?? 120;
+      const days = Math.max(1, Math.min(Math.floor(args.days ?? 40), maxDays));
+      const shared = {
+        endpoint: config.tushareEndpoint,
+        token: config.tushareToken,
+        signal: exec.signal,
+      };
+      const tradeDates = await fetchTradeDates({ ...shared, endDate: args.endDate, count: days });
+      if (tradeDates.length === 0) {
+        throw new Error(`No trading days found on or before ${args.endDate}`);
+      }
+      const perDay = await mapWithConcurrency(
+        tradeDates,
+        tradeDate => fetchDailyByDate({ ...shared, tradeDate }),
+        config.marketConcurrency ?? 4,
+      );
+      const bars = perDay.flat();
+      return { tradeDates, count: bars.length, bars };
+    },
+    presentCall: (args) => ({
+      card: 'generic',
+      title: `全市场日线 ${args.endDate} 前 ${args.days ?? 40} 个交易日`,
+      kind: 'stock-market',
+      rawInput: args.endDate,
+    }),
+    presentResult: (_args, result) => (result.isError ? undefined : {
+      card: 'generic',
+      title: `全市场日线 ${result.tradeDates?.[0]} → ${result.tradeDates?.[result.tradeDates.length - 1]}`,
+      kind: 'stock-market',
+      count: result.count,
+    }),
+  }));
+}
+
+/** Model-facing summary; the bars themselves belong to the canonical value. */
+function formatMarketBarsOutput(_args, value) {
+  const dates = value.tradeDates ?? [];
+  const codes = new Set((value.bars ?? []).map(bar => bar.code));
+  return [
+    `全市场日线:${value.count} 根 K 线,覆盖 ${codes.size} 只股票 × ${dates.length} 个交易日` +
+      `(${dates[0]} → ${dates[dates.length - 1]})。`,
+    '每根含 code / date / open / high / low / close / preClose / pctChg / volume / amount(不复权)。',
+    '在 Code Mode 中按 code 分组计算(如 N 日最低价),不要逐只调用工具。',
+  ].join('\n');
 }
 
 /** daily_basic fields requested from Tushare, in snake_case → canonical camelCase. */

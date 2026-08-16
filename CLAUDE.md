@@ -48,7 +48,10 @@ lib/index.js      # 插件入口(纯 ESM JS,运行时不经构建直接加载)
 
 ## 现有插件(改动前先读对应入口)
 
-- **astock**:A 股行情工具(astock_data / astock_indicators / astock_quote / astock_search)。分层:`lib/data.js` 封装东方财富(EastMoney)公开 API 的抓取与代码归一化(市场前缀 0=深/1=沪/2=京),`lib/indicators.js` 是纯函数指标计算(MA/MACD/RSI/KDJ/BOLL 等),`lib/index.js` 只做工具注册与格式化输出。它是本仓库 `defineTool` 完整形态的参考实现:parameters、output.schema、`render`(模型可见文本)、`presentationMeta` / `presentCall` / `presentResult`(UI 卡片)、`timeoutMs`、`isConcurrencySafe`,以及每个工具配套的 `ctx.systemPrompt.section`。
+- **astock**:A 股数据工具。分层:`lib/data.js`(东方财富单只行情/K 线,代码归一化 0=深/1=沪/2=京)、`lib/market.js`(东方财富全市场快照)、`lib/tushare.js`(Tushare Pro:基本面 + 按交易日的全市场日线 + 交易日历)、`lib/indicators.js`(纯函数指标 MA/MACD/RSI/KDJ/BOLL 等)、`lib/value.js`(规范值数值助手)、`lib/index.js` 只做工具注册与格式化输出。它是本仓库 `defineTool` 完整形态的参考实现:parameters、output.schema、`render`(模型可见文本)、`presentationMeta` / `presentCall` / `presentResult`(UI 卡片)、`timeoutMs`、`isConcurrencySafe`,以及每个工具配套的 `ctx.systemPrompt.section`。
+  - 单只:`astock_data` / `astock_indicators` / `astock_quote` / `astock_search`;配了 Tushare token 才注册 `astock_fundamentals`。
+  - **批量(筛选类需求走这里)**:`astock_market_quotes`(全市场实时快照,免 token)、`astock_market_bars`(全市场日线窗口,需 token)。设计要点:**扫描在工具内部完成,复杂度 O(天数) 而非 O(股票数)**——逐只抓 2800 次会被数据源限流(踩过),而按交易日批量取 40 天只需 40 次请求、约 2 秒拿到 22 万根 K 线。规范值是给 Code Mode 用的程序化数组,`render` **只返回摘要**(几千行绝不能进模型上下文),筛选逻辑由模型在 Code Mode 里写 JS 完成,这样"最低价小数点后两位相同"这种任意条件无需插件预设参数。
+  - 缺失值铁律:东方财富用 `'-'`、Tushare 用 `null` 表示缺失,而 `Number(null) === 0`——一律走 `lib/value.js` 的 `finiteNumber` / `assignFinite`,缺失字段**整个键省略**,绝不写成 0 或 NaN(闭合 schema 下 NaN 会让整次调用变成 isError)。
 - **gateway-compat**:`llm/stream` waterfall 包装的参考实现——把网关缺失 `[DONE]` 导致的 `STREAM_CLOSED` 终止错误改写为正常 `stop`,但仅在已收到正文且无 tool call 进行中时,真正的中途断流仍然失败并保留重试资格。
 
 ## dsh 插件开发规范(违反会启动崩溃或静默失效)
