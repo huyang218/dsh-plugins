@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 DeepSeek Harness(dsh)的插件 monorepo。dsh 是"一切皆插件"的 agent 运行框架(基于 Cordis);本仓库存放通用插件(`packages/*`,每个都是可安装的 dsh bundle)和将来的客户定制组合(`customers/*`)。
 
 - 参考文档:dsh 源码仓库在 `~/Documents/code/open/deepseek-harness`,插件开发看 `docs/user/develop/`(入门)、`docs/cookbook/adding-a-tool.md`(工具进阶)、`docs/cookbook/extension-cookbook.md`(扩展形态)、`docs/architecture.md`(扩展点总表)。
-- 本机的 dsh 以桌面壳应用 "DeepSeek Harness.app" 运行(壳项目在 `~/Documents/code/open/dsh-shell`)。
+- 本机的 dsh 以桌面壳应用 "DeepSeek Harness.app" 运行(壳项目在 `~/Documents/code/alpha/dsh-shell`,已装到 `/Applications`)。改壳代码后要重新打包并部署:`npx electron-builder --mac dir` → 退出应用 → `ditto dist/mac-arm64/"DeepSeek Harness.app" /Applications/`(菜单的"重启服务"只重启 dsh 服务进程,不加载新的壳代码)。
+- 壳提供**安装期配置表单**:插件导出 Schemastery `Config` 时,插件管理里安装完会自动弹表单(也可随时点"设置"),值写进 profile 的 `plugin-config.json` 并镜像成 `cordis.patch.yml` 里带标记的托管块。给用户的插件要可配置,就导出 `Config`,不要让用户碰命令行。
 
 ## 本机运行环境(重要,和标准安装不同)
 
