@@ -85,9 +85,152 @@ test('astock_market_bars registers only with a token and clamps the window', asy
     assert.equal(value.tradeDates.length, 5)
     assert.equal(requested.length, 5, 'one request per trading day, not per stock')
     assert.equal(value.count, 5)
-    assert.equal(value.bars[0].code, '000001')
+    assert.deepEqual(value.codes, ['000001'])
+    // One packed row per stock, bars in ascending day order whatever order the
+    // concurrent per-day requests landed in.
+    assert.equal(value.rows.length, 1)
+    assert.deepEqual(
+      value.rows[0].split(';').map(row => Number(row.split(',')[0])),
+      [0, 1, 2, 3, 4],
+    )
+    assert.equal(value.rows[0].split(';')[0], '0,11.5,11.7,11.44,11.62,11.5,1,10,20')
     const text = tool.output.render({}, value)[0].text
     assert.match(text, /1 只股票 × 5 个交易日/)
+  } finally {
+    globalThis.fetch = real
+  }
+})
+
+test('astock_market_bars packs absent metrics as empty tokens, never as 0', async () => {
+  const ctx = fakeCtx()
+  plugin.apply(ctx, new plugin.Config({ tushareToken: 'tok' }))
+  const tool = ctx._tools.find(t => t.name === 'astock_market_bars')
+
+  const real = globalThis.fetch
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body)
+    if (body.api_name === 'trade_cal') {
+      return new Response(JSON.stringify({
+        code: 0, data: { fields: ['cal_date'], items: [['20260803']] },
+      }))
+    }
+    return new Response(JSON.stringify({
+      code: 0,
+      data: {
+        fields: ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'pct_chg', 'vol', 'amount'],
+        // A freshly listed stock reports no pre_close/pct_chg.
+        items: [['000001.SZ', '20260803', 11.5, 11.7, 11.44, 11.62, null, null, 10, 20]],
+      },
+    }))
+  }
+  try {
+    const value = await tool.execute({ endDate: '20260803', days: 1 }, { signal: undefined })
+    assert.equal(value.rows[0], '0,11.5,11.7,11.44,11.62,,,10,20')
+    const [, , , , , preClose, pctChg] = value.rows[0]
+      .split(',')
+      .map(token => (token === '' ? undefined : Number(token)))
+    assert.equal(preClose, undefined, 'an absent metric must not decode to 0')
+    assert.equal(pctChg, undefined)
+  } finally {
+    globalThis.fetch = real
+  }
+})
+
+/** Fake Tushare serving one stock per requested trading day. */
+function stubMarketBars(t, tradeDates) {
+  const requested = []
+  const real = globalThis.fetch
+  t.after(() => { globalThis.fetch = real })
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body)
+    if (body.api_name === 'trade_cal') {
+      return new Response(JSON.stringify({
+        code: 0, data: { fields: ['cal_date'], items: tradeDates.map(d => [d]) },
+      }))
+    }
+    requested.push(body.params.trade_date)
+    return new Response(JSON.stringify({
+      code: 0,
+      data: {
+        fields: ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'pct_chg', 'vol', 'amount'],
+        items: [['000001.SZ', body.params.trade_date, 11.5, 11.7, 11.44, 11.62, 11.5, 1, 10, 20]],
+      },
+    }))
+  }
+  return requested
+}
+
+test('astock_market_bars serves a repeated window from the closed-day cache', async (t) => {
+  const ctx = fakeCtx()
+  plugin.apply(ctx, new plugin.Config({ tushareToken: 'tok' }))
+  const tool = ctx._tools.find(t2 => t2.name === 'astock_market_bars')
+  const requested = stubMarketBars(t, ['20260731', '20260801', '20260802', '20260803'])
+
+  const first = await tool.execute({ endDate: '20260803', days: 4 }, { signal: undefined })
+  assert.equal(requested.length, 4)
+  const second = await tool.execute({ endDate: '20260803', days: 4 }, { signal: undefined })
+  assert.equal(requested.length, 4, 'closed days never need a second request')
+  assert.deepEqual(second, first, 'the cached window rebuilds the same value')
+
+  // A narrower window reuses the same days at their NEW indices: di indexes
+  // this call's tradeDates, so a cached row must not carry a stale one.
+  const narrow = await tool.execute({ endDate: '20260803', days: 2 }, { signal: undefined })
+  assert.equal(requested.length, 4, 'still no new requests')
+  assert.deepEqual(narrow.tradeDates, ['20260802', '20260803'])
+  assert.deepEqual(
+    narrow.rows[0].split(';').map(row => Number(row.split(',')[0])),
+    [0, 1],
+  )
+})
+
+test('astock_market_bars refetches the current day instead of caching it', async (t) => {
+  const ctx = fakeCtx()
+  plugin.apply(ctx, new plugin.Config({ tushareToken: 'tok' }))
+  const tool = ctx._tools.find(t2 => t2.name === 'astock_market_bars')
+  // Today's session is still being written, so its bars are not immutable.
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date()).replace(/-/g, '')
+  const requested = stubMarketBars(t, [today])
+
+  await tool.execute({ endDate: today, days: 1 }, { signal: undefined })
+  await tool.execute({ endDate: today, days: 1 }, { signal: undefined })
+  assert.deepEqual(requested, [today, today])
+})
+
+test('astock_market_bars refuses an over-budget window after one probe request', async () => {
+  const ctx = fakeCtx()
+  // 3 stocks × 4 days = 12 bars, budget 6.
+  plugin.apply(ctx, new plugin.Config({ tushareToken: 'tok', marketMaxBars: 6 }))
+  const tool = ctx._tools.find(t => t.name === 'astock_market_bars')
+
+  const requested = []
+  const real = globalThis.fetch
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body)
+    if (body.api_name === 'trade_cal') {
+      const days = ['20260731', '20260801', '20260802', '20260803']
+      return new Response(JSON.stringify({
+        code: 0, data: { fields: ['cal_date'], items: days.map(d => [d]) },
+      }))
+    }
+    requested.push(body.params.trade_date)
+    return new Response(JSON.stringify({
+      code: 0,
+      data: {
+        fields: ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'pct_chg', 'vol', 'amount'],
+        items: ['000001.SZ', '000002.SZ', '000003.SZ'].map(
+          code => [code, body.params.trade_date, 11.5, 11.7, 11.44, 11.62, 11.5, 1, 10, 20],
+        ),
+      },
+    }))
+  }
+  try {
+    await assert.rejects(
+      tool.execute({ endDate: '20260803', days: 4 }, { signal: undefined }),
+      /窗口过大.*days 降到 2/s,
+    )
+    assert.deepEqual(requested, ['20260803'], 'refuse after the probe, not after the window')
   } finally {
     globalThis.fetch = real
   }

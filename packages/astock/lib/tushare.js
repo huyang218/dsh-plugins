@@ -38,6 +38,53 @@ function rowsToObjects(data) {
   });
 }
 
+/** Tushare's own words for "you called this interface too often". */
+const RATE_LIMIT_PATTERN = /频率超限|每分钟最多访问该接口|rate limit/i;
+
+/** @param {number} ms @returns {Promise<void>} */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Sliding-window quota for Tushare interfaces.
+ *
+ * Tushare meters PER interface (`daily` allows 500 calls a minute) and a
+ * whole-market window costs one call per trading day, so two or three wide
+ * calls in a row exhaust the quota — observed as a mid-scan failure of the
+ * whole tool. Waiting out the window is strictly better than failing: the
+ * caller already budgeted minutes for a market-wide scan.
+ *
+ * @param {Object} [options]
+ * @param {number} [options.perMinute=450] - Calls allowed per interface per window
+ * @param {number} [options.windowMs=60000] - Window length
+ * @param {Function} [options.now=Date.now] - Clock, injected in tests
+ * @param {Function} [options.wait=sleep] - Delay, injected in tests
+ * @returns {Function} async (apiName, signal) => void, resolving when a slot is free
+ */
+function createRateLimiter({ perMinute = 450, windowMs = 60000, now = Date.now, wait = sleep } = {}) {
+  const hits = new Map();
+  return async function acquire(apiName, signal) {
+    if (!(perMinute > 0)) return;
+    for (;;) {
+      signal?.throwIfAborted();
+      let stamps = hits.get(apiName);
+      if (!stamps) hits.set(apiName, (stamps = []));
+      const cutoff = now() - windowMs;
+      let fresh = 0;
+      while (fresh < stamps.length && stamps[fresh] <= cutoff) fresh++;
+      if (fresh > 0) stamps.splice(0, fresh);
+      if (stamps.length < perMinute) {
+        stamps.push(now());
+        return;
+      }
+      // Sleep until the oldest hit leaves the window, then re-check: other
+      // callers may have taken the freed slot first.
+      await wait(Math.max(50, stamps[0] - cutoff));
+    }
+  };
+}
+
 /**
  * Call a Tushare Pro API.
  * @param {Object} options
@@ -47,23 +94,37 @@ function rowsToObjects(data) {
  * @param {Object} [options.params] - API parameters
  * @param {string} [options.fields] - Comma-separated fields to return
  * @param {AbortSignal} [options.signal] - Cancellation signal
+ * @param {Function} [options.limiter] - Quota gate from {@link createRateLimiter}
+ * @param {number} [options.rateRetries=2] - Retries when the provider reports
+ *   the quota anyway (the token is shared with whatever else uses it)
+ * @param {Function} [options.wait=sleep] - Delay before a retry, injected in tests
  * @returns {Promise<Array<Object>>} Result rows as objects
  */
-async function tushareQuery({ endpoint, token, apiName, params = {}, fields = '', signal }) {
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ api_name: apiName, token, params, fields }),
-    signal,
-  });
-  if (!response.ok) {
-    throw new Error(`Tushare HTTP ${response.status} for ${apiName}`);
+async function tushareQuery({
+  endpoint, token, apiName, params = {}, fields = '', signal, limiter, rateRetries = 2, wait = sleep,
+}) {
+  for (let attempt = 0; ; attempt++) {
+    await limiter?.(apiName, signal);
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_name: apiName, token, params, fields }),
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Tushare HTTP ${response.status} for ${apiName}`);
+    }
+    const json = await response.json();
+    if (json.code === 0) return rowsToObjects(json.data);
+    const message = json.msg || `code ${json.code}`;
+    // The local quota gate cannot see calls made with this token elsewhere,
+    // so the provider's own verdict still has to be survivable.
+    if (RATE_LIMIT_PATTERN.test(message) && attempt < rateRetries) {
+      await wait(Math.min(15000, 3000 * (attempt + 1)));
+      continue;
+    }
+    throw new Error(`Tushare ${apiName} failed: ${message}`);
   }
-  const json = await response.json();
-  if (json.code !== 0) {
-    throw new Error(`Tushare ${apiName} failed: ${json.msg || `code ${json.code}`}`);
-  }
-  return rowsToObjects(json.data);
 }
 
 /**
@@ -85,7 +146,7 @@ function fromTsCode(tsCode) {
  * @param {number} options.count - How many trading days to return
  * @returns {Promise<string[]>} Trading days, ascending
  */
-async function fetchTradeDates({ endpoint, token, endDate, count, signal }) {
+async function fetchTradeDates({ endpoint, token, endDate, count, signal, limiter }) {
   // Over-reach the calendar range so `count` trading days are always covered:
   // ~250 trading days a year, plus a floor for very short windows.
   const spanDays = Math.ceil(count * 1.7) + 30;
@@ -100,7 +161,7 @@ async function fetchTradeDates({ endpoint, token, endDate, count, signal }) {
   ].join('');
 
   const rows = await tushareQuery({
-    endpoint, token, apiName: 'trade_cal', signal,
+    endpoint, token, apiName: 'trade_cal', signal, limiter,
     params: { exchange: 'SSE', start_date: startDate, end_date: endDate, is_open: '1' },
     fields: 'cal_date',
   });
@@ -121,9 +182,9 @@ const DAILY_FIELDS = {
  * @param {string} options.tradeDate - Trading day, YYYYMMDD
  * @returns {Promise<Array<Object>>} Canonical bars, one per stock
  */
-async function fetchDailyByDate({ endpoint, token, tradeDate, signal }) {
+async function fetchDailyByDate({ endpoint, token, tradeDate, signal, limiter }) {
   const rows = await tushareQuery({
-    endpoint, token, apiName: 'daily', signal,
+    endpoint, token, apiName: 'daily', signal, limiter,
     params: { trade_date: tradeDate },
     fields: ['ts_code', 'trade_date', ...Object.keys(DAILY_FIELDS)].join(','),
   });
@@ -174,6 +235,7 @@ export {
   fromTsCode,
   rowsToObjects,
   tushareQuery,
+  createRateLimiter,
   fetchTradeDates,
   fetchDailyByDate,
   mapDailyRow,

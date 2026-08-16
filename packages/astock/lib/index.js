@@ -17,7 +17,9 @@ import Schema from '@deepseek-ai/schemastery';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { fetchKline, fetchQuote, searchStocks, PERIOD_NAMES, normalizeCode } from './data.js';
 import { calculateAllIndicators } from './indicators.js';
-import { toTsCode, tushareQuery, fetchTradeDates, fetchDailyByDate, mapWithConcurrency } from './tushare.js';
+import {
+  toTsCode, tushareQuery, createRateLimiter, fetchTradeDates, fetchDailyByDate, mapWithConcurrency,
+} from './tushare.js';
 import { fetchMarketQuotes } from './market.js';
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -43,11 +45,34 @@ const Config = Schema.object({
   marketPauseMs: Schema.number().default(120).description(
     'Delay between whole-market snapshot pages; raise it if the data source throttles.',
   ),
+  marketQuoteHosts: Schema.array(Schema.string()).default([]).description(
+    'EastMoney hosts tried in order for the whole-market list, first one that '
+    + 'answers wins. Empty uses the built-in order (realtime first, delayed as '
+    + 'the fallback) — override only when the defaults stop serving.',
+  ),
   marketMaxDays: Schema.number().default(120).description(
     'Upper bound on the trading-day window astock_market_bars may request.',
   ),
   marketConcurrency: Schema.number().default(4).description(
     'Parallel per-day requests when fetching whole-market history.',
+  ),
+  tushareMaxPerMinute: Schema.number().default(450).description(
+    'Requests per minute per Tushare interface. Tushare meters per interface '
+    + '(daily allows 500/min) and one whole-market window costs one request per '
+    + 'trading day, so wide calls exhaust the quota without a gate. 0 disables it.',
+  ),
+  marketDayCacheSize: Schema.number().default(130).description(
+    'Closed trading days kept in memory by astock_market_bars: ~0.55 MB a day '
+    + 'for the whole market, so ~70 MB at this default. A past day\'s bars never '
+    + 'change, so repeat windows cost no requests at all. Keep it ABOVE '
+    + 'marketMaxDays — a cache smaller than the window it serves evicts every '
+    + 'day before the next call reaches it. 0 disables it.',
+  ),
+  marketMaxBars: Schema.number().default(800000).description(
+    'Bar budget for one astock_market_bars call (stocks × trading days). The '
+    + 'whole result crosses the Code Mode worker boundary, which validates and '
+    + 'rebuilds it under its own heap cap; an over-budget window is refused '
+    + 'with a narrow-the-window message instead of being fetched.',
   ),
 });
 
@@ -628,8 +653,12 @@ function apply(ctx, config) {
 
   // ── Tushare-backed tools (only when a token is configured) ──
   if (config?.tushareToken) {
-    registerFundamentalsTool(ctx, config);
-    registerMarketBarsTool(ctx, config);
+    // One quota gate for every Tushare-backed tool in this plugin instance:
+    // the limit is per interface per token, so it has to be shared to mean
+    // anything.
+    const limiter = createRateLimiter({ perMinute: config.tushareMaxPerMinute ?? 450 });
+    registerFundamentalsTool(ctx, config, limiter);
+    registerMarketBarsTool(ctx, config, limiter);
   }
 }
 
@@ -652,7 +681,7 @@ function registerMarketQuotesTool(ctx, config) {
 
   ctx.tools.register(defineTool({
     name: 'astock_market_quotes',
-    description: 'Fetch a realtime snapshot of EVERY listed A-share stock (code, name, ST flag, price, change %, total/circulating market cap, listing date). Use this for market-wide screening instead of querying stocks one by one.',
+    description: 'Fetch a snapshot of EVERY listed A-share stock (code, name, ST flag, price, change %, total/circulating market cap, listing date). Use this for market-wide screening instead of querying stocks one by one. Realtime when the realtime host serves; the value\'s `delayed` flag says when it fell back to delayed quotes.',
     parameters: {},
     output: {
       schema: {
@@ -660,6 +689,10 @@ function registerMarketQuotesTool(ctx, config) {
         additionalProperties: false,
         properties: {
           count: { type: 'integer' },
+          delayed: {
+            type: 'boolean',
+            description: 'True when the realtime hosts refused and a delayed one served the sweep.',
+          },
           stocks: {
             type: 'array',
             required: true,
@@ -686,12 +719,13 @@ function registerMarketQuotesTool(ctx, config) {
     timeoutMs: 120000,
     isConcurrencySafe: () => true,
     async execute(_args, exec) {
-      const stocks = await fetchMarketQuotes({
+      const { rows, delayed } = await fetchMarketQuotes({
         pageSize: config.marketPageSize ?? 100,
         pauseMs: config.marketPauseMs ?? 120,
+        hosts: config.marketQuoteHosts?.length ? config.marketQuoteHosts : undefined,
         signal: exec.signal,
       });
-      return { count: stocks.length, stocks };
+      return { count: rows.length, delayed, stocks: rows };
     },
     presentCall: () => ({ card: 'generic', title: '全市场行情快照', kind: 'stock-market' }),
     presentResult: (_args, result) => (result.isError ? undefined : {
@@ -705,7 +739,8 @@ function formatMarketQuotesOutput(value) {
   const stocks = value.stocks ?? [];
   const st = stocks.filter(s => s.isSt).length;
   const lines = [
-    `全市场快照:${value.count} 只股票(其中 ST/退市 ${st} 只)。`,
+    `全市场快照:${value.count} 只股票(其中 ST/退市 ${st} 只)${
+      value.delayed ? ',实时源不可用,本次为延时行情' : ''}。`,
     '每行含 code / name / isSt / price / changePct / totalMarketCap / circulatingMarketCap / listDate。',
     '样例:',
   ];
@@ -723,12 +758,18 @@ function formatMarketQuotesOutput(value) {
  * gets rate-limited long before a market-wide window finishes.
  * @param {Object} ctx - Plugin context
  * @param {Object} config - Validated plugin config with a non-empty tushareToken
+ * @param {Function} [limiter] - Shared Tushare quota gate
  */
-function registerMarketBarsTool(ctx, config) {
+function registerMarketBarsTool(ctx, config, limiter) {
+  // A closed trading day's bars are immutable, so the packed rows for one can
+  // be reused forever. Screening is iterative — the model refetches the same
+  // window as it refines a filter — and each refetch is otherwise a full
+  // request per trading day against a per-minute quota.
+  const dayCache = createDayCache(config.marketDayCacheSize ?? 60);
   ctx.systemPrompt.section({
     name: 'tool:astock_market_bars',
     order: 146,
-    text: 'Use the astock_market_bars tool to get daily OHLC bars for EVERY A-share stock across a trailing window of trading days (from Tushare). It answers questions like "which stocks made their N-day low on date D". Bars are unadjusted (不复权). In Code Mode, group the returned array by code and compute in JavaScript.',
+    text: 'Use the astock_market_bars tool to get daily OHLC bars for EVERY A-share stock across a trailing window of trading days (from Tushare). It answers questions like "which stocks made their N-day low on date D". Bars are unadjusted (不复权). The result is packed for size: `rows[i]` holds every bar of `codes[i]` as one string, bars separated by ";" and each bar being `fields` — a leading `di` index into `tradeDates`, then the numbers. An EMPTY token is a missing metric: `Number("")` is 0, so parse with `t === "" ? undefined : Number(t)`. In Code Mode, decode only the stocks you need.',
   });
 
   ctx.tools.register(defineTool({
@@ -751,33 +792,39 @@ function registerMarketBarsTool(ctx, config) {
         type: 'object',
         additionalProperties: false,
         properties: {
-          tradeDates: { type: 'array', required: true, items: { type: 'string' } },
-          count: { type: 'integer' },
-          bars: {
+          tradeDates: {
             type: 'array',
             required: true,
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                code: { type: 'string' },
-                date: { type: 'string', description: 'Trading day, YYYYMMDD' },
-                open: { type: 'number' },
-                high: { type: 'number' },
-                low: { type: 'number' },
-                close: { type: 'number' },
-                preClose: { type: 'number' },
-                pctChg: { type: 'number' },
-                volume: { type: 'number', description: 'Volume in 手' },
-                amount: { type: 'number', description: 'Turnover in 千元' },
-              },
-            },
+            items: { type: 'string' },
+            description: 'Trading days in the window, ascending; a bar\'s leading di indexes this.',
+          },
+          codes: {
+            type: 'array',
+            required: true,
+            items: { type: 'string' },
+            description: 'Stock codes, ascending; parallel to rows.',
+          },
+          fields: {
+            type: 'string',
+            required: true,
+            description: 'Comma-separated field order inside one packed bar.',
+          },
+          count: { type: 'integer', description: 'Total bars packed across every stock.' },
+          rows: {
+            type: 'array',
+            required: true,
+            items: { type: 'string' },
+            description:
+              'rows[i] holds every bar of codes[i]: bars joined by ";", each bar being the '
+              + 'fields joined by ",". Suspended days are simply absent; an empty token is a '
+              + 'missing metric and must not be read as 0.',
           },
         },
       },
       render: (args, value) => [{ type: 'text', text: formatMarketBarsOutput(args, value) }],
       presentationMeta: (_args, value) => ({
         count: value.count,
+        stocks: value.codes.length,
         days: value.tradeDates.length,
         from: value.tradeDates[0],
         to: value.tradeDates[value.tradeDates.length - 1],
@@ -792,18 +839,69 @@ function registerMarketBarsTool(ctx, config) {
         endpoint: config.tushareEndpoint,
         token: config.tushareToken,
         signal: exec.signal,
+        limiter,
       };
       const tradeDates = await fetchTradeDates({ ...shared, endDate: args.endDate, count: days });
       if (tradeDates.length === 0) {
         throw new Error(`No trading days found on or before ${args.endDate}`);
       }
-      const perDay = await mapWithConcurrency(
-        tradeDates,
-        tradeDate => fetchDailyByDate({ ...shared, tradeDate }),
+      // One day's packed rows: cached when the day is closed, fetched
+      // otherwise. The cache holds each day as two newline-joined strings —
+      // 5560 separate small strings per day would cost several times more
+      // resident memory than the window they serve.
+      const today = shanghaiToday();
+      const dayRows = async (tradeDate) => {
+        const cached = dayCache.get(tradeDate);
+        if (cached) return { codes: cached.codes.split('\n'), rows: cached.rows.split('\n') };
+        const bars = await fetchDailyByDate({ ...shared, tradeDate });
+        const day = { codes: bars.map(bar => bar.code), rows: bars.map(packMarketBar) };
+        if (tradeDate < today) {
+          dayCache.set(tradeDate, { codes: day.codes.join('\n'), rows: day.rows.join('\n') });
+        }
+        return day;
+      };
+      // The newest day doubles as the budget probe: only the live stock count
+      // turns a window into a bar count, and one request is a cheap price for
+      // refusing early instead of after the whole window has been fetched.
+      const probeIndex = tradeDates.length - 1;
+      const probe = await dayRows(tradeDates[probeIndex]);
+      const maxBars = config.marketMaxBars ?? 800000;
+      const stocks = probe.codes.length;
+      const estimate = stocks * tradeDates.length;
+      if (estimate > maxBars) {
+        const fits = Math.max(1, Math.floor(maxBars / stocks));
+        throw new Error(
+          `窗口过大:${stocks} 只股票 × ${tradeDates.length} 个交易日 ≈ ${estimate} 根 K 线,`
+          + `超过 marketMaxBars(${maxBars})。请把 days 降到 ${fits} 或更小后分批取数。`,
+        );
+      }
+      // Fold each day into its stock's slot as it lands, so the whole market's
+      // bar objects never pile up at once — the packed rows are all that lives
+      // past a day's request.
+      const byCode = new Map();
+      const collect = (dayIndex, day) => {
+        for (let i = 0; i < day.codes.length; i++) {
+          let slots = byCode.get(day.codes[i]);
+          if (!slots) byCode.set(day.codes[i], (slots = new Array(tradeDates.length)));
+          slots[dayIndex] = `${dayIndex},${day.rows[i]}`;
+        }
+      };
+      collect(probeIndex, probe);
+      await mapWithConcurrency(
+        tradeDates.slice(0, probeIndex),
+        async (tradeDate, index) => collect(index, await dayRows(tradeDate)),
         config.marketConcurrency ?? 4,
       );
-      const bars = perDay.flat();
-      return { tradeDates, count: bars.length, bars };
+      const codes = [...byCode.keys()].sort();
+      const rows = new Array(codes.length);
+      let count = 0;
+      for (let index = 0; index < codes.length; index++) {
+        // filter drops the holes left by suspended days, keeping ascending order.
+        const packed = byCode.get(codes[index]).filter(row => row !== undefined);
+        count += packed.length;
+        rows[index] = packed.join(';');
+      }
+      return { tradeDates, codes, fields: MARKET_BAR_FIELDS, count, rows };
     },
     presentCall: (args) => ({
       card: 'generic',
@@ -820,15 +918,83 @@ function registerMarketBarsTool(ctx, config) {
   }));
 }
 
-/** Model-facing summary; the bars themselves belong to the canonical value. */
+/**
+ * Field order inside one packed bar. `di` indexes `tradeDates`, so a bar
+ * carries its day as one small integer instead of repeating a date string
+ * 660k times.
+ */
+const MARKET_BAR_FIELDS = 'di,open,high,low,close,preClose,pctChg,volume,amount';
+
+/** The numeric fields of a packed bar, in `MARKET_BAR_FIELDS` order after `di`. */
+const MARKET_BAR_METRICS = ['open', 'high', 'low', 'close', 'preClose', 'pctChg', 'volume', 'amount'];
+
+/**
+ * Pack one canonical bar's metrics. An absent metric becomes an EMPTY token
+ * rather than a 0: the canonical value omits what the provider did not report,
+ * and this string has to preserve that difference.
+ *
+ * The `di` prefix is NOT included — a day's packed rows are cached and reused
+ * across windows, where the same day sits at a different index.
+ * @param {Object} bar - Canonical bar
+ * @returns {string} Packed metrics, e.g. "12.3,12.5,12.1,12.4,12,0.5,1000,2000"
+ */
+function packMarketBar(bar) {
+  let row = '';
+  for (const field of MARKET_BAR_METRICS) {
+    row += `${row === '' ? '' : ','}${bar[field] === undefined ? '' : bar[field]}`;
+  }
+  return row;
+}
+
+/** Today in the exchange's timezone, YYYYMMDD — the line between a closed
+ * (immutable, cacheable) trading day and one still being written. */
+function shanghaiToday() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date()).replace(/-/g, '');
+}
+
+/**
+ * Bounded cache of packed rows keyed by trading day, evicting the least
+ * recently used day. Only closed days are ever stored, so an entry never goes
+ * stale — the bound is about memory (~1 MB a day), not correctness.
+ * @param {number} maxDays - Days to keep; 0 disables caching
+ * @returns {{ get: Function, set: Function }} Cache handle
+ */
+function createDayCache(maxDays) {
+  const days = new Map();
+  return {
+    get(tradeDate) {
+      const entry = days.get(tradeDate);
+      if (entry === undefined) return undefined;
+      // Re-insert so Map iteration order stays least-recently-used first.
+      days.delete(tradeDate);
+      days.set(tradeDate, entry);
+      return entry;
+    },
+    set(tradeDate, entry) {
+      if (!(maxDays > 0)) return;
+      days.set(tradeDate, entry);
+      while (days.size > maxDays) days.delete(days.keys().next().value);
+    },
+  };
+}
+
+/**
+ * Model-facing summary; the bars themselves belong to the canonical value.
+ * It carries the decode line because the packed shape is only cheap if the
+ * model parses it correctly on the first try.
+ */
 function formatMarketBarsOutput(_args, value) {
   const dates = value.tradeDates ?? [];
-  const codes = new Set((value.bars ?? []).map(bar => bar.code));
+  const codes = value.codes ?? [];
   return [
-    `全市场日线:${value.count} 根 K 线,覆盖 ${codes.size} 只股票 × ${dates.length} 个交易日` +
-      `(${dates[0]} → ${dates[dates.length - 1]})。`,
-    '每根含 code / date / open / high / low / close / preClose / pctChg / volume / amount(不复权)。',
-    '在 Code Mode 中按 code 分组计算(如 N 日最低价),不要逐只调用工具。',
+    `全市场日线:${value.count} 根 K 线,覆盖 ${codes.length} 只股票 × ${dates.length} 个交易日` +
+      `(${dates[0]} → ${dates[dates.length - 1]},不复权)。`,
+    `数据已打包:rows[i] 是 codes[i] 的全部 K 线,";" 分隔,每根为 ${value.fields},di 是 tradeDates 下标。`,
+    '在 Code Mode 中解析(空字段=缺失,直接 Number 会得到 0):',
+    'const bars = res.rows[i].split(";").map(r => r.split(",").map(t => t === "" ? undefined : Number(t)));',
+    '按需解析你要的股票即可,不要逐只调用工具。',
   ].join('\n');
 }
 
@@ -890,8 +1056,9 @@ function formatFundamentalsOutput(value) {
  * Register the Tushare-backed fundamentals tool.
  * @param {Object} ctx - Plugin context
  * @param {Object} config - Validated plugin config with a non-empty tushareToken
+ * @param {Function} [limiter] - Shared Tushare quota gate
  */
-function registerFundamentalsTool(ctx, config) {
+function registerFundamentalsTool(ctx, config, limiter) {
   ctx.systemPrompt.section({
     name: 'tool:astock_fundamentals',
     order: 144,
@@ -955,6 +1122,7 @@ function registerFundamentalsTool(ctx, config) {
         params,
         fields: Object.keys(FUNDAMENTAL_FIELDS).join(','),
         signal: exec.signal,
+        limiter,
       });
       if (rows.length === 0) {
         throw new Error(`No daily_basic data for ${tsCode}${args.tradeDate ? ` on ${args.tradeDate}` : ''}`);

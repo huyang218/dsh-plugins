@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  toTsCode, fromTsCode, rowsToObjects, tushareQuery,
+  toTsCode, fromTsCode, rowsToObjects, tushareQuery, createRateLimiter,
   fetchTradeDates, fetchDailyByDate, mapDailyRow, mapWithConcurrency,
 } from '../lib/tushare.js'
 
@@ -131,4 +131,70 @@ test('tushareQuery posts the request shape and surfaces API errors', async (t) =
     () => tushareQuery({ endpoint: 'https://example.test', token: 'tok', apiName: 'daily_basic' }),
     /积分不足/,
   )
+})
+
+test('createRateLimiter meters per interface and waits out the window', async () => {
+  let clock = 1_000_000
+  const waited = []
+  // The limiter only sleeps; the clock moves because the caller's own work
+  // does. Advancing it here is what makes the window slide.
+  const acquire = createRateLimiter({
+    perMinute: 2,
+    windowMs: 60000,
+    now: () => clock,
+    wait: async (ms) => { waited.push(ms); clock += ms },
+  })
+
+  await acquire('daily')
+  await acquire('daily')
+  assert.deepEqual(waited, [], 'the first two fit in the window')
+
+  // The third has to wait for the oldest of the two to age out.
+  await acquire('daily')
+  assert.deepEqual(waited, [60000])
+
+  // A different interface has its own quota — Tushare meters them separately.
+  await acquire('trade_cal')
+  assert.deepEqual(waited, [60000], 'trade_cal must not pay for daily')
+
+  // perMinute 0 disables the gate entirely.
+  const open = createRateLimiter({ perMinute: 0, wait: async () => assert.fail('must not wait') })
+  for (let i = 0; i < 10; i++) await open('daily')
+})
+
+test('tushareQuery retries the provider quota message, then surfaces it', async (t) => {
+  const real = globalThis.fetch
+  t.after(() => { globalThis.fetch = real })
+
+  const quota = '抱歉，您访问接口(daily)频率超限(500次/分钟)'
+  let attempts = 0
+  globalThis.fetch = async () => {
+    attempts += 1
+    return new Response(JSON.stringify(attempts < 3
+      ? { code: 40203, msg: quota }
+      : { code: 0, msg: null, data: { fields: ['ts_code'], items: [['000001.SZ']] } }))
+  }
+  const waited = []
+  const rows = await tushareQuery({
+    endpoint: 'https://example.test', token: 'tok', apiName: 'daily',
+    wait: async (ms) => { waited.push(ms) },
+  })
+  assert.deepEqual(rows, [{ ts_code: '000001.SZ' }])
+  assert.equal(attempts, 3, 'two retries before the answer')
+  assert.deepEqual(waited, [3000, 6000], 'backoff grows between retries')
+
+  // Retries are bounded: a quota that never clears still fails the call.
+  attempts = 0
+  globalThis.fetch = async () => {
+    attempts += 1
+    return new Response(JSON.stringify({ code: 40203, msg: quota }))
+  }
+  await assert.rejects(
+    () => tushareQuery({
+      endpoint: 'https://example.test', token: 'tok', apiName: 'daily',
+      rateRetries: 1, wait: async () => {},
+    }),
+    /频率超限/,
+  )
+  assert.equal(attempts, 2, 'one retry, then surface')
 })

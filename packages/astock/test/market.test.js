@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fetchMarketQuotes, mapQuoteRow, isSt, daysListed } from '../lib/market.js'
+import { fetchMarketQuotes, mapQuoteRow, isSt, daysListed, MARKET_HOSTS } from '../lib/market.js'
 
 test('isSt flags ST, *ST and delisting names', () => {
   assert.equal(isSt('*ST 天成'), true)
@@ -35,18 +35,52 @@ test('fetchMarketQuotes pages until total is reached', async () => {
     const diff = page <= 2 ? Array.from({ length: 2 }, (_, i) => makeRow(page * 10 + i)) : []
     return { ok: true, json: async () => ({ data: { total: 4, diff } }) }
   }
-  const rows = await fetchMarketQuotes({ pageSize: 2, pauseMs: 0, fetchImpl })
+  const { rows, host, delayed } = await fetchMarketQuotes({ pageSize: 2, pauseMs: 0, fetchImpl })
   assert.equal(rows.length, 4)
   assert.deepEqual(pages, [1, 2], 'stops as soon as total rows are collected')
   assert.equal(rows[0].code, '000010')
+  assert.equal(host, MARKET_HOSTS[0], 'the preferred host serves when it answers')
+  assert.equal(delayed, false)
 })
 
-test('fetchMarketQuotes stops on an empty page and surfaces HTTP errors', async () => {
+test('fetchMarketQuotes falls back to the next host and reports the delay', async () => {
+  const tried = []
+  const makeRow = i => ({ f12: String(i).padStart(6, '0'), f14: `股票${i}`, f2: 10, f3: 0, f20: 1e9, f21: 1e9, f26: 20200101 })
+  const fetchImpl = async (url) => {
+    const host = new URL(url).host
+    tried.push(host)
+    // What the realtime shards actually do: close the socket, no HTTP status.
+    if (host === 'push2.eastmoney.com') throw new TypeError('fetch failed')
+    const page = Number(new URL(url).searchParams.get('pn'))
+    return { ok: true, json: async () => ({ data: { total: 1, diff: page === 1 ? [makeRow(1)] : [] } }) }
+  }
+  const { rows, host, delayed } = await fetchMarketQuotes({ pageSize: 2, pauseMs: 0, fetchImpl })
+  assert.equal(rows.length, 1)
+  assert.equal(host, 'push2delay.eastmoney.com')
+  assert.equal(delayed, true, 'a screen must be able to say the prices lag')
+  assert.deepEqual(tried, ['push2.eastmoney.com', 'push2delay.eastmoney.com'])
+})
+
+test('fetchMarketQuotes stops on a later empty page and fails when no host serves', async () => {
+  // An empty FIRST page means the host is not serving the market: silently
+  // screening zero stocks would answer "no matches" instead of failing.
   const empty = async () => ({ ok: true, json: async () => ({ data: { total: 999, diff: [] } }) })
-  assert.deepEqual(await fetchMarketQuotes({ pauseMs: 0, fetchImpl: empty }), [])
+  await assert.rejects(
+    () => fetchMarketQuotes({ pauseMs: 0, fetchImpl: empty }),
+    /全市场快照不可用/,
+  )
 
   const failing = async () => ({ ok: false, status: 503, json: async () => ({}) })
   await assert.rejects(() => fetchMarketQuotes({ pauseMs: 0, fetchImpl: failing }), /503/)
+
+  // A later empty page is still the pagination terminator.
+  const makeRow = i => ({ f12: String(i).padStart(6, '0'), f14: `股票${i}`, f2: 10, f3: 0, f20: 1e9, f21: 1e9, f26: 20200101 })
+  const twoThenEmpty = async (url) => {
+    const page = Number(new URL(url).searchParams.get('pn'))
+    return { ok: true, json: async () => ({ data: { total: 999, diff: page === 1 ? [makeRow(1), makeRow(2)] : [] } }) }
+  }
+  const { rows } = await fetchMarketQuotes({ pageSize: 2, pauseMs: 0, fetchImpl: twoThenEmpty })
+  assert.equal(rows.length, 2)
 })
 
 test('daysListed measures calendar age from the listing date', () => {
