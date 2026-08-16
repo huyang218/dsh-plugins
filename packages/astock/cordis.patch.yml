@@ -1,0 +1,4 @@
+# dsh-plugin-astock bundle layer: mounts the A-share data tools.
+- insert:
+    - id: astock
+      name: dsh-plugin-astock

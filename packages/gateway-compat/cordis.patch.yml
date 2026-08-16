@@ -1,0 +1,4 @@
+# dsh-plugin-gateway-compat bundle layer: mounts the SSE [DONE] tolerance wrapper.
+- insert:
+    - id: gateway-compat
+      name: dsh-plugin-gateway-compat
