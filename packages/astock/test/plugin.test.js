@@ -338,3 +338,20 @@ test('astock_search render handles empty results', () => {
   const rendered = tool.output.render({ keyword: 'nope' }, { results: [] })
   assert.match(rendered[0].text, /未找到/)
 })
+
+test('batch summaries warn that their data is unreachable outside run_code', () => {
+  const ctx = fakeCtx()
+  plugin.apply(ctx, new plugin.Config({ tushareToken: 'tok' }))
+
+  const quotes = ctx._tools.find(t => t.name === 'astock_market_quotes')
+  const quotesText = quotes.output.render({}, { count: 1, stocks: [{ code: '000001', name: 'x', isSt: false }] })[0].text
+  assert.match(quotesText, /run_code/, 'a native caller must be told where the data lives')
+  assert.match(quotesText, /不要.*编造|不要根据本摘要猜测/, 'and must be told not to invent one')
+
+  const bars = ctx._tools.find(t => t.name === 'astock_market_bars')
+  const barsText = bars.output.render({}, {
+    tradeDates: ['20260814'], codes: ['000001'], fields: 'di,open,high,low,close',
+    count: 1, rows: ['0,1,2,0.5,1.5'],
+  })[0].text
+  assert.match(barsText, /run_code/)
+})

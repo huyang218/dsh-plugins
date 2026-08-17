@@ -734,6 +734,23 @@ function registerMarketQuotesTool(ctx, config) {
   }));
 }
 
+/**
+ * Trailer on every batch summary.
+ *
+ * These tools answer with a whole-market dataset as their canonical value and
+ * render only this summary, so a NATIVE call (one tool call per action, where
+ * only rendered text reaches the model) can see the shape of the answer but
+ * none of the data. That failure is silent and dangerous: an agent that keeps
+ * going invents a dataset — scraping session logs, refetching by hand — and
+ * reports a confidently wrong screen. Saying so in the result is the only
+ * signal the tool can give, since the presentation mode is chosen per agent
+ * and is not visible from here.
+ */
+const CODE_MODE_ONLY = '⚠️ 本结果的数据只存在于规范值中,只能在 run_code 程序里访问'
+  + '(`const res = await tools.<name>(args)`)。如果你不是在 run_code 里调用的,'
+  + '就拿不到这些数据:请改用 run_code 重新调用本工具。不要根据本摘要猜测答案,'
+  + '也不要从会话日志、临时文件或其他渠道自行拼凑数据——拿不到就直接说明,不要给出编造的结论。';
+
 /** Model-facing summary: the rows themselves belong to the canonical value. */
 function formatMarketQuotesOutput(value) {
   const stocks = value.stocks ?? [];
@@ -748,7 +765,7 @@ function formatMarketQuotesOutput(value) {
     lines.push(`  ${stock.code} ${stock.name} 价=${stock.price ?? 'N/A'} 流通市值=${
       stock.circulatingMarketCap ? (stock.circulatingMarketCap / 1e8).toFixed(1) + '亿' : 'N/A'}`);
   }
-  lines.push('筛选请在 Code Mode 中对返回数组做过滤,不要逐只调用工具。');
+  lines.push(CODE_MODE_ONLY);
   return lines.join('\n');
 }
 
@@ -995,6 +1012,7 @@ function formatMarketBarsOutput(_args, value) {
     '在 Code Mode 中解析(空字段=缺失,直接 Number 会得到 0):',
     'const bars = res.rows[i].split(";").map(r => r.split(",").map(t => t === "" ? undefined : Number(t)));',
     '按需解析你要的股票即可,不要逐只调用工具。',
+    CODE_MODE_ONLY,
   ].join('\n');
 }
 
