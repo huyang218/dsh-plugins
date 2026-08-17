@@ -7,15 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 DeepSeek Harness(dsh)的插件 monorepo。dsh 是"一切皆插件"的 agent 运行框架(基于 Cordis);本仓库存放通用插件(`packages/*`,每个都是可安装的 dsh bundle)和将来的客户定制组合(`customers/*`)。
 
 - 参考文档:dsh 源码仓库在 `~/Documents/code/open/deepseek-harness`,插件开发看 `docs/user/develop/`(入门)、`docs/cookbook/adding-a-tool.md`(工具进阶)、`docs/cookbook/extension-cookbook.md`(扩展形态)、`docs/architecture.md`(扩展点总表)。
-- 本机的 dsh 以桌面壳应用 "DeepSeek Harness.app" 运行(壳项目在 `~/Documents/code/alpha/dsh-shell`,已装到 `/Applications`)。改壳代码后要重新打包并部署:`npx electron-builder --mac dir` → 退出应用 → `ditto dist/mac-arm64/"DeepSeek Harness.app" /Applications/`(菜单的"重启服务"只重启 dsh 服务进程,不加载新的壳代码)。
+- 本机的 dsh 以桌面壳应用 "dsh Desktop.app" 运行(壳项目在 `~/Documents/code/alpha/dsh-desktop`,原名 dsh-shell,已装到 `/Applications`)。改壳代码后要重新打包并部署:`npx electron-builder --mac dir` → 退出应用 → `ditto dist/mac-arm64/"dsh Desktop.app" /Applications/`(菜单的"重启服务"只重启 dsh 服务进程,不加载新的壳代码)。
 - 壳提供**安装期配置表单**:插件导出 Schemastery `Config` 时,插件管理里安装完会自动弹表单(也可随时点"设置"),值写进 profile 的 `plugin-config.json` 并镜像成 `cordis.patch.yml` 里带标记的托管块。给用户的插件要可配置,就导出 `Config`,不要让用户碰命令行。
 
 ## 本机运行环境(重要,和标准安装不同)
 
-- `DSH_HOME` = `~/Library/Application Support/dsh-shell/dsh-home`(不是默认位置)。
-- dsh 运行时(npm 安装的 `@deepseek-ai/dsh`)在 `~/Library/Application Support/dsh-shell/runtime/slot-a|slot-b`,CLI 入口:`node "<slot>/node_modules/@deepseek-ai/dsh/lib/bin.js"`。命令行操作 profile 前必须 `export DSH_HOME` 为上述路径。
+- `DSH_HOME` = `~/Library/Application Support/dsh-desktop/dsh-home`(不是默认位置)。
+- dsh 运行时(npm 安装的 `@deepseek-ai/dsh`)在 `~/Library/Application Support/dsh-desktop/runtime/slot-a|slot-b`,CLI 入口:`node "<slot>/node_modules/@deepseek-ai/dsh/lib/bin.js"`。命令行操作 profile 前必须 `export DSH_HOME` 为上述路径。
 - 改插件代码后:通过应用菜单栏 `dsh → 重启服务`(或托盘菜单)生效;插件是 `link:` 链接,无需重装。
-- 服务/启动日志:`~/Library/Application Support/dsh-shell/dsh-shell.log`。会话日志(调试模型可见行为的事实来源):`$DSH_HOME/sessions/**/session.jsonl.zstd`,用 `zstd -dc` 解压看事件流。
+- 服务/启动日志:`~/Library/Application Support/dsh-desktop/dsh-desktop.log`。会话日志(调试模型可见行为的事实来源):`$DSH_HOME/sessions/**/session.jsonl.zstd`,用 `zstd -dc` 解压看事件流。
 - 模型走 tokenhub.tencentmaas.com 网关(OpenAI 兼容,但不发 SSE `[DONE]`):`packages/gateway-compat` 插件与 home 级补丁 `$DSH_HOME/cordis.patch.yml` 里的 `llm-deepseek` retryPolicy(含 `STREAM_CLOSED`)共同兜底。改动网关相关行为前先读这两处。
 
 ## 常用命令
@@ -23,8 +23,8 @@ DeepSeek Harness(dsh)的插件 monorepo。dsh 是"一切皆插件"的 agent 运�
 ```sh
 npm install                       # monorepo 根;为 link: 插件提供 peer 依赖解析
 npm test                          # 全部单元测试;单包:npm test -w dsh-plugin-<name>
-export DSH_HOME="$HOME/Library/Application Support/dsh-shell/dsh-home"
-BIN="$HOME/Library/Application Support/dsh-shell/runtime/slot-a/node_modules/@deepseek-ai/dsh/lib/bin.js"
+export DSH_HOME="$HOME/Library/Application Support/dsh-desktop/dsh-home"
+BIN="$HOME/Library/Application Support/dsh-desktop/runtime/slot-a/node_modules/@deepseek-ai/dsh/lib/bin.js"
 node "$BIN" plugin --profile web add ./packages/<name>     # 安装插件到 web profile
 node "$BIN" plugin --profile web remove <package-name>     # 卸载
 node "$BIN" --profile web --dump-config                    # 不启动,验证组合树里的插件行
@@ -105,5 +105,5 @@ lib/index.js      # 插件入口(纯 ESM JS,运行时不经构建直接加载)
 1. 单元测试:`npm test -w <package-name>`(改公共约定跑根 `npm test`)——抓逻辑回归与 schema 违规;
 2. 纯加载冒烟(上面的 `node -e import` 一行)——抓语法/依赖错误;
 3. `--dump-config` 确认插件行在组合树里;
-4. 菜单重启服务,确认 `dsh-shell.log` 出现 `serving on`(启动崩溃会记完整堆栈);
+4. 菜单重启服务,确认 `dsh-desktop.log` 出现 `serving on`(启动崩溃会记完整堆栈);
 5. 行为验证:UI 里让模型调用工具,或 headless 跑一条任务;调不通时解压最新会话日志看 `tool/result` 与 `finish` 事件。
