@@ -1,0 +1,4 @@
+# dsh-plugin-tool-usage bundle layer: measures what tool calls cost.
+- insert:
+    - id: tool-usage
+      name: dsh-plugin-tool-usage

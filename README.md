@@ -26,6 +26,7 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 | [**ainfo**](packages/tools/ainfo) | [`tools`](packages/tools) | A-share information: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token |
 | [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
 | [**tool-health**](packages/runtime/tool-health) | [`runtime`](packages/runtime) | Remembers which tools have been failing, across sessions, and tells the next session before it starts work | — |
+| [**tool-usage**](packages/runtime/tool-usage) | [`runtime`](packages/runtime) | Measures what a session spends on tools — calls, duration percentiles, failures — with an optional budget warning | — |
 | [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel | — |
 
 > [!NOTE]
