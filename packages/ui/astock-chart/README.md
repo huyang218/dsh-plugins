@@ -11,6 +11,15 @@ Needs [`dsh-plugin-astock`](../../tools/astock) for the data, and the web
 client for the card. Restart the service after installing; the browser picks
 the bundle up on the next load.
 
+> [!IMPORTANT]
+> **The agent must be able to call `astock_data` natively.** Under a pure Code
+> Mode preset every call goes through `run_code`, and a code-dispatched
+> sub-call has no card — the runtime skips `presentationMeta` for it, so no
+> series ever reaches the browser and you get the generic row instead of a
+> chart. Use a preset whose tool presentation is `native` or `both`; `both`
+> keeps `run_code` available for batch work while single-stock lookups stay
+> native and drawable.
+
 ## How it renders
 
 The card registers into the web client's `tool.call.toolview` slot, keyed by
