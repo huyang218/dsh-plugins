@@ -150,3 +150,20 @@ test('a news excerpt is plain text, not the feed’s article HTML', async () => 
   const item = mapNews({ title: 't', pub_time: '2026-08-14 18:00:00', content: body })
   assert.ok(!item.excerpt.includes('<'))
 })
+
+test('a truncated summary says how much it left out', () => {
+  // Five reports shown out of fifty read as the whole set unless the summary
+  // says otherwise, and "what do analysts think" then gets answered from a
+  // tenth of the evidence.
+  const tushare = fakeTushare({
+    report_rc: () => Array.from({ length: 50 }, (_, i) => ({
+      ts_code: '600519.SH', report_date: '2026081' + (i % 9), org_name: '机构' + i, rating: '买入',
+    })),
+  })
+  const { tool } = toolOf({ tushare }, 'ainfo_research')
+  return tool.execute({ code: '600519', limit: 50 }, {}).then(value => {
+    const text = tool.output.render({}, value)[0].text
+    assert.match(text, /共 50 条/)
+    assert.match(text, /规范值 reports\[\]/)
+  })
+})

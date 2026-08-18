@@ -5,9 +5,17 @@
  * @module dsh-plugin-tool-usage/stats
  */
 
-/** A tool with no calls yet. */
+/**
+ * A tool with no calls yet.
+ *
+ * `calls`/`totalMs` count every dispatch, which is the truth about the tool.
+ * `topCalls`/`topMs` count only calls the model made directly, which is the
+ * truth about the session: under Code Mode a `run_code` call already CONTAINS
+ * the time of the tools it dispatched, so summing every row double-counts the
+ * wall clock — measured at 204ms reported for 100ms actually spent.
+ */
 function emptyStat() {
-  return { calls: 0, failures: 0, totalMs: 0, maxMs: 0, samples: [] };
+  return { calls: 0, failures: 0, totalMs: 0, maxMs: 0, samples: [], topCalls: 0, topMs: 0, nestedCalls: 0 };
 }
 
 /**
@@ -18,14 +26,16 @@ function emptyStat() {
  * percentiles that matter describe how the tool behaves NOW, not an average
  * dragged down by a cold start an hour ago.
  * @param {Object} stat - Existing statistics, or undefined
- * @param {Object} call - `{ ms, ok }`
+ * @param {Object} call - `{ ms, ok, nested }`; `nested` marks a run_code sub-dispatch
  * @param {number} [sampleLimit=200] - Durations retained per tool
  * @returns {Object} The updated statistics
  */
-function fold(stat, { ms, ok }, sampleLimit = 200) {
+function fold(stat, { ms, ok, nested = false }, sampleLimit = 200) {
   const next = { ...emptyStat(), ...stat, samples: [...(stat?.samples ?? [])] };
   const duration = Number.isFinite(ms) && ms >= 0 ? ms : 0;
   next.calls += 1;
+  if (nested) next.nestedCalls += 1;
+  else { next.topCalls += 1; next.topMs += duration; }
   if (!ok) next.failures += 1;
   next.totalMs += duration;
   next.maxMs = Math.max(next.maxMs, duration);
@@ -61,6 +71,7 @@ function summarize(stats) {
   const tools = [...stats.entries()].map(([name, stat]) => ({
     name,
     calls: stat.calls,
+    nestedCalls: stat.nestedCalls ?? 0,
     failures: stat.failures,
     totalMs: Math.round(stat.totalMs),
     meanMs: stat.calls > 0 ? Math.round(stat.totalMs / stat.calls) : 0,
@@ -71,7 +82,10 @@ function summarize(stats) {
   return {
     calls: tools.reduce((sum, tool) => sum + tool.calls, 0),
     failures: tools.reduce((sum, tool) => sum + tool.failures, 0),
-    totalMs: tools.reduce((sum, tool) => sum + tool.totalMs, 0),
+    // Wall clock, counting only what the model dispatched directly. A nested
+    // call's time is already inside its parent's.
+    totalMs: [...stats.values()].reduce((sum, stat) => sum + Math.round(stat.topMs ?? 0), 0),
+    nestedCalls: tools.reduce((sum, tool) => sum + tool.nestedCalls, 0),
     tools,
   };
 }
@@ -90,11 +104,15 @@ function renderSummary(stats, { topN = 10 } = {}) {
   if (summary.calls === 0) return 'No tool calls yet.';
   const lines = [
     `Tool usage: ${summary.calls} calls, ${summary.failures} failed, `
-    + `${duration(summary.totalMs)} spent in tools.`,
+    + `${duration(summary.totalMs)} spent in tools`
+    + (summary.nestedCalls > 0
+      ? ` (wall clock: ${summary.nestedCalls} of those calls ran inside another and are not counted twice).`
+      : '.'),
   ];
   for (const tool of summary.tools.slice(0, topN)) {
     lines.push(`  ${tool.name}: ${tool.calls}×  total ${duration(tool.totalMs)}  `
       + `mean ${duration(tool.meanMs)}  p95 ${duration(tool.p95Ms)}`
+      + (tool.nestedCalls > 0 ? `  (${tool.nestedCalls} nested)` : '')
       + (tool.failures > 0 ? `  (${tool.failures} failed)` : ''));
   }
   if (summary.tools.length > topN) lines.push(`  …and ${summary.tools.length - topN} more tools`);
@@ -118,11 +136,14 @@ function renderBudgetWarning(stats, { calls: callBudget = 0, seconds: secondBudg
   const overTime = secondBudget > 0 && summary.totalMs >= secondBudget * 1000;
   if (!overCalls && !overTime) return '';
 
-  const heaviest = summary.tools[0];
   const lines = [
     `This session has already made ${summary.calls} tool calls totalling `
     + `${duration(summary.totalMs)} of tool time.`,
   ];
+  // Name the heaviest tool that actually did work rather than the transport
+  // that contained it: "most of it is run_code" tells the model nothing it can
+  // act on, while the sub-call underneath is the thing to narrow.
+  const heaviest = summary.tools.find(tool => tool.nestedCalls > 0) ?? summary.tools[0];
   if (heaviest) {
     lines.push(`Most of it is ${heaviest.name} (${heaviest.calls} calls, ${duration(heaviest.totalMs)}).`);
   }

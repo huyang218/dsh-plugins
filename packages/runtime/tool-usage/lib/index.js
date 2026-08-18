@@ -70,7 +70,14 @@ function apply(ctx, config = {}) {
       // blew up spent its time too, and hiding it would make the slowest tool
       // in a bad session look like the cheapest.
       const toolName = typeof exec?.name === 'string' && exec.name !== '' ? exec.name : '(unknown)';
-      stats.set(toolName, fold(stats.get(toolName), { ms: Date.now() - startedAt, ok }, sampleLimit));
+      // `exec.parent` is set only on run_code sub-dispatches. Marking them is
+      // what keeps the session total a wall clock: the parent's duration
+      // already contains theirs.
+      stats.set(toolName, fold(
+        stats.get(toolName),
+        { ms: Date.now() - startedAt, ok, nested: exec?.parent !== undefined },
+        sampleLimit,
+      ));
     }
   });
 

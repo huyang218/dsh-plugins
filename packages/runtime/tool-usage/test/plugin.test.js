@@ -125,3 +125,19 @@ test('disposing logs the summary once, and never when nothing ran', async () => 
   quiet._disposers.forEach(dispose => dispose())
   assert.equal(quiet._logged.length, 0, 'a session that called nothing logs nothing')
 })
+
+test('the wrapper marks run_code sub-dispatches as nested', async () => {
+  const ctx = fakeCtx()
+  plugin.apply(ctx, new plugin.Config())
+  const wrapper = ctx._listeners['tools/execute'][0]
+
+  await wrapper({ name: 'run_code' }, async () => {
+    await dispatch(wrapper, 'inner', 5)          // no parent → would be counted twice
+    await wrapper({ name: 'inner2', parent: 'tok' }, async () => ok)
+    return ok
+  })
+  const snapshot = ctx._provided.toolUsage.snapshot()
+  assert.equal(snapshot.nestedCalls, 1, 'only the call carrying a parent token is nested')
+  const inner2 = snapshot.tools.find(t => t.name === 'inner2')
+  assert.equal(inner2.nestedCalls, 1)
+})

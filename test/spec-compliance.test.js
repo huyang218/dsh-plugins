@@ -103,3 +103,46 @@ test('tool plugins keep their canonical values honest', async () => {
     }
   }
 })
+
+test('a tool whose summary hides rows says so', async () => {
+  // Two failures in this repo came from a model treating a truncated summary
+  // as the whole answer. A render that shows only part of what it has must
+  // say where the rest is, so the model can fetch it instead of extrapolating.
+  const listy = {
+    astock_financials: { code: 'x', report: 'indicators', count: 30, key: 'periods' },
+    astock_moneyflow: { scope: 'stock', code: 'x', count: 30, key: 'rows' },
+    astock_convertible_bonds: { tradeDate: '20260814', count: 30, key: 'bonds' },
+    ainfo_news: { count: 30, key: 'news' },
+    ainfo_research: { count: 30, key: 'reports' },
+    ainfo_events: { kind: 'forecast', count: 30, key: 'events' },
+  }
+  const sample = i => ({
+    date: '20260814', period: '20251231', code: '000001', name: 'n' + i, title: 't' + i,
+    org: 'o', rating: '买入', holder: 'h', open: 1, high: 2, low: 0.5, close: 1.5,
+    volume: 10, netAmount: 1, convPremium: 0.1, convValue: 100, roe: 1,
+  })
+
+  for (const { dir, pkg } of all.filter(p => p.group === 'tools')) {
+    const module_ = await import(new URL(`../${join(dir, pkg.main)}`, import.meta.url).href)
+    const registered = []
+    const service = { configured: true, access: () => 'points', query: async () => [], tradeDates: async () => ['20260814'] }
+    const ctx = {
+      tools: { register: t => registered.push(t) },
+      systemPrompt: { section() {}, context() {} },
+      on() {}, effect: fn => fn(),
+      inject: (names, body) => body({ ...ctx, tushare: service, tools: { register: t => registered.push(t) } }),
+    }
+    module_.apply(ctx, module_.Config ? new module_.Config() : {})
+
+    for (const tool of registered) {
+      const spec = listy[tool.name]
+      if (!spec) continue
+      const value = { ...spec, [spec.key]: Array.from({ length: 30 }, (_, i) => sample(i)) }
+      const text = tool.output.render({ kind: spec.kind }, value)[0].text
+      const shown = text.split('\n').length
+      assert.ok(shown < 30, `${tool.name} renders every row; the summary should be bounded`)
+      assert.match(text, /规范值|Code Mode|run_code/,
+        `${tool.name} truncates its summary without saying where the rest is`)
+    }
+  }
+})

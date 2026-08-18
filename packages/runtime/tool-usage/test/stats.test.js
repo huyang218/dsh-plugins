@@ -80,3 +80,40 @@ test('the budget warning stays silent under budget and suggests technique over i
 
   assert.match(renderBudgetWarning(stats, { calls: 0, seconds: 20 }), /30\.0s/, 'the time budget alone can trip it')
 })
+
+test('a nested call is counted for its tool but not for the session clock', () => {
+  // Under Code Mode a run_code call CONTAINS the tools it dispatched, so
+  // summing every row double-counts the wall clock. Measured before this
+  // split: 204ms reported for 100ms actually spent, which also tripped a
+  // budget the session never crossed.
+  const stats = new Map([
+    ['run_code', fold(undefined, { ms: 100, ok: true })],
+    ['astock_market_bars', fold(undefined, { ms: 60, ok: true, nested: true })],
+    ['astock_quote', fold(undefined, { ms: 40, ok: true, nested: true })],
+  ])
+  const summary = summarize(stats)
+  assert.equal(summary.totalMs, 100, 'the session clock counts only what the model dispatched')
+  assert.equal(summary.calls, 3, 'every call is still counted')
+  assert.equal(summary.nestedCalls, 2)
+
+  const bars = summary.tools.find(t => t.name === 'astock_market_bars')
+  assert.equal(bars.totalMs, 60, 'the tool still owns its own duration')
+  assert.equal(bars.nestedCalls, 1)
+
+  const text = renderSummary(stats)
+  assert.match(text, /not counted twice/, 'the report must explain the difference')
+  assert.match(text, /\(1 nested\)/)
+})
+
+test('the budget warning names the tool that did the work, not the transport', () => {
+  const stats = new Map([
+    ['run_code', fold(undefined, { ms: 30_000, ok: true })],
+    ['astock_market_bars', fold(undefined, { ms: 29_000, ok: true, nested: true })],
+  ])
+  const text = renderBudgetWarning(stats, { seconds: 10 })
+  // "Most of it is run_code" tells the model nothing it can act on.
+  assert.match(text, /astock_market_bars/)
+  assert.ok(!/Most of it is run_code/.test(text))
+  // And the threshold is measured against wall clock, not the doubled total.
+  assert.equal(renderBudgetWarning(stats, { seconds: 40 }), '', '30s of wall clock is under a 40s budget')
+})

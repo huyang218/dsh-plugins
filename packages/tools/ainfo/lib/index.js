@@ -246,6 +246,11 @@ function formatResearchOutput(value) {
   for (const report of reports.slice(0, 5)) {
     lines.push(`  [${report.date ?? ''}] ${report.org ?? ''} ${report.rating ?? ''} ${report.reportTitle ?? ''}`);
   }
+  // Without this the five shown read as the whole set, and "what do analysts
+  // think" gets answered from a tenth of the evidence.
+  if (reports.length > 5) {
+    lines.push(`  …(共 ${reports.length} 条,全部在规范值 reports[] 里;逐条分析请在 Code Mode 中处理)`);
+  }
   lines.push('评级与目标价是券商观点,引用时请注明机构,不要当作事实陈述。');
   return lines.join('\n');
 }
