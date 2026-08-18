@@ -1,0 +1,45 @@
+{
+  "name": "dsh-plugin-astock",
+  "version": "0.1.0",
+  "description": "A-share (Chinese stock market) data plugin for DeepSeek Harness. Fetch K-line data (daily, weekly, monthly, hourly) and calculate standard technical indicators (MA, MACD, RSI, KDJ, BOLL, etc.).",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "a-share",
+    "stock",
+    "market-data",
+    "tushare",
+    "technical-indicators"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR-GITHUB-USERNAME/dsh-plugins.git",
+    "directory": "packages/tools/astock"
+  },
+  "homepage": "https://github.com/YOUR-GITHUB-USERNAME/dsh-plugins/tree/main/packages/tools/astock#readme",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test 'test/*.test.js'"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "category": "tools/finance"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-invariants": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  }
+}

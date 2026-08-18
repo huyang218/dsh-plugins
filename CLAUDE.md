@@ -4,7 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 这个仓库是什么
 
-DeepSeek Harness(dsh)的插件 monorepo。dsh 是"一切皆插件"的 agent 运行框架(基于 Cordis);本仓库存放通用插件(`packages/*`,每个都是可安装的 dsh bundle)和将来的客户定制组合(`customers/*`)。
+DeepSeek Harness(dsh)的插件 monorepo,**面向开源发布**(MIT)。dsh 是"一切皆插件"的 agent 运行框架(基于 Cordis)。
+
+目录按**扩展形态**分层——决定插件怎么写、怎么审的是这个维度,不是业务场景:
+
+```
+packages/tools/      模型可调用的能力(注册工具,对模型可见)     astock
+packages/runtime/    改变 harness 行为(挂 waterfall,对模型不可见)  gateway-compat
+packages/ui/         Web 客户端扩展(暂空)
+```
+
+业务场景由包名和各自 README 体现,不进目录结构。客户定制组合(`customers/*`)不放在这个公开仓库里。
 
 - 参考文档:dsh 源码仓库在 `~/Documents/code/open/deepseek-harness`,插件开发看 `docs/user/develop/`(入门)、`docs/cookbook/adding-a-tool.md`(工具进阶)、`docs/cookbook/extension-cookbook.md`(扩展形态)、`docs/architecture.md`(扩展点总表)。
 - 本机的 dsh 以桌面壳应用 "dsh Desktop.app" 运行(壳项目在 `~/Documents/code/alpha/dsh-desktop`,原名 dsh-shell,已装到 `/Applications`)。改壳代码后要重新打包并部署:`npx electron-builder --mac dir` → 退出应用 → `ditto dist/mac-arm64/"dsh Desktop.app" /Applications/`(菜单的"重启服务"只重启 dsh 服务进程,不加载新的壳代码)。
@@ -16,7 +26,7 @@ DeepSeek Harness(dsh)的插件 monorepo。dsh 是"一切皆插件"的 agent 运�
 - dsh 运行时(npm 安装的 `@deepseek-ai/dsh`)在 `~/Library/Application Support/dsh-desktop/runtime/slot-a|slot-b`,CLI 入口:`node "<slot>/node_modules/@deepseek-ai/dsh/lib/bin.js"`。命令行操作 profile 前必须 `export DSH_HOME` 为上述路径。
 - 改插件代码后:通过应用菜单栏 `dsh → 重启服务`(或托盘菜单)生效;插件是 `link:` 链接,无需重装。
 - 服务/启动日志:`~/Library/Application Support/dsh-desktop/dsh-desktop.log`。会话日志(调试模型可见行为的事实来源):`$DSH_HOME/sessions/**/session.jsonl.zstd`,用 `zstd -dc` 解压看事件流。
-- 模型走 tokenhub.tencentmaas.com 网关(OpenAI 兼容,但不发 SSE `[DONE]`):`packages/gateway-compat` 插件与 home 级补丁 `$DSH_HOME/cordis.patch.yml` 里的 `llm-deepseek` retryPolicy(含 `STREAM_CLOSED`)共同兜底。改动网关相关行为前先读这两处。
+- 模型走 tokenhub.tencentmaas.com 网关(OpenAI 兼容,但不发 SSE `[DONE]`):`packages/runtime/gateway-compat` 插件与 home 级补丁 `$DSH_HOME/cordis.patch.yml` 里的 `llm-deepseek` retryPolicy(含 `STREAM_CLOSED`)共同兜底。改动网关相关行为前先读这两处。
 
 ## 常用命令
 
@@ -25,16 +35,16 @@ npm install                       # monorepo 根;为 link: 插件提供 peer 依
 npm test                          # 全部单元测试;单包:npm test -w dsh-plugin-<name>
 export DSH_HOME="$HOME/Library/Application Support/dsh-desktop/dsh-home"
 BIN="$HOME/Library/Application Support/dsh-desktop/runtime/slot-a/node_modules/@deepseek-ai/dsh/lib/bin.js"
-node "$BIN" plugin --profile web add ./packages/<name>     # 安装插件到 web profile
+node "$BIN" plugin --profile web add ./packages/tools/<name>   # 安装插件到 web profile
 node "$BIN" plugin --profile web remove <package-name>     # 卸载
 node "$BIN" --profile web --dump-config                    # 不启动,验证组合树里的插件行
 node "$BIN" --profile headless "任务描述"                   # 端到端验证(走真实模型,消耗 API 额度)
-node -e "import('<abs>/packages/<name>/lib/index.js').then(m => console.log(Object.keys(m)))"  # 纯加载冒烟
+node -e "import('<abs>/packages/<类型>/<name>/lib/index.js').then(m => console.log(Object.keys(m)))"  # 纯加载冒烟
 ```
 
 ## 插件结构约定
 
-每个 `packages/<name>/`:
+每个 `packages/<类型>/<name>/`(`<类型>` = `tools` / `runtime` / `ui`):
 
 ```
 package.json      # name 为 dsh-plugin-<name>;"type": "module";main 指向 lib/index.js
@@ -42,9 +52,19 @@ cordis.patch.yml  # bundle 配置层:- insert: [{ id: <name>, name: dsh-plugin-<
 lib/index.js      # 插件入口(纯 ESM JS,运行时不经构建直接加载)
 ```
 
+**三处名字各不相同,别混**(上游 dsh 的写法为准):
+
+```
+package.json 的 name    dsh-plugin-astock   # npm 包名,带前缀
+lib/index.js 导出的 name astock             # 短名,不带前缀 —— Loader 诊断用
+cordis.patch.yml 的 id  astock             # 组合树里的行 id,配置覆盖按它定向
+cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
+```
+
 - `package.json` 必须声明 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`,`files` 包含 `lib` 和 `cordis.patch.yml`。
 - 用到的 dsh 包(`@deepseek-ai/dsh-tools` 等)写进 `peerDependencies`;monorepo 根的 `npm install` 负责让符号链接位置能解析到它们。不要在单个插件目录里建 node_modules。
-- 发布给客户前:补 `prepare` 脚本(git 直装场景)或发私有 npm。
+- 开源包元数据:`license: MIT` + 各包自带 `LICENSE`(进 `files`)、`repository.directory` 指到包目录、`keywords` 含 `dsh-plugin`(插件市场靠它发现)、`dsh.category` 写 `tools/finance` 这类分类。**不要写 `private: true`**——本仓库插件免构建纯 ESM,发 npm 后用户一键安装无需构建授权(git 直装则要求用户在 `pnpm-workspace.yaml` 里 `allowBuilds`)。
+- 每个插件包必须有自己的 `README.md`:它就是 npm 页面,也是用户判断要不要装的唯一依据。
 
 ## 现有插件(改动前先读对应入口)
 
@@ -68,7 +88,7 @@ lib/index.js      # 插件入口(纯 ESM JS,运行时不经构建直接加载)
 ### 配置
 
 4. **不写死部署可变参数**(超时、端点、周期列表等)。检验标准:能否只改 cordis.patch.yml 不改代码就换值。需要校验时导出 Schemastery `Config`(默认值写在 schema 里,不要导出普通对象),让无效配置在加载时响亮失败。
-5. **通用插件禁止出现客户名/客户逻辑**;客户差异放 `customers/` bundle 的配置层,或做成 Provider 缝。
+5. **通用插件禁止出现客户名/客户逻辑**;客户差异放客户自己 bundle 的配置层(私有仓库),或做成 Provider 缝。
 
 ### 工具(defineTool)
 
@@ -91,8 +111,8 @@ lib/index.js      # 插件入口(纯 ESM JS,运行时不经构建直接加载)
 
 用 Node 内置 test runner(`node:test` + `node:assert/strict`),零依赖、免构建,与插件"纯 ESM 直接加载"一致(上游 dsh 用 vitest,不适用本仓库)。
 
-- **位置**:每个包 `packages/<name>/test/*.test.js`,测试与被测包同住;`files` 不含 `test`,不随包发布。
-- **命令**:根 `npm test` 跑全部;单包 `npm test -w <package-name>`(或 cd 进包目录跑 `npm test`);单文件 `node --test packages/<name>/test/<file>.test.js`。
+- **位置**:每个包 `packages/<类型>/<name>/test/*.test.js`,测试与被测包同住;`files` 不含 `test`,不随包发布。
+- **命令**:根 `npm test` 跑全部;单包 `npm test -w <package-name>`(或 cd 进包目录跑 `npm test`);单文件 `node --test packages/<类型>/<name>/test/<file>.test.js`。
 - **测真实入口**:`import * as plugin from '../lib/index.js'`(发布产物路径)。每个插件必须有一个入口测试(参照两个包的 `test/plugin.test.js`):
   - 断言 `!('default' in plugin)` 且命名导出 `name` / `apply`(有依赖的还有 `inject`)——防"default 导出丢 inject"回归;
   - 用 fake ctx(只需捕获 `tools.register` / `systemPrompt.section` / `on`)调 `apply`,断言注册的工具名与 section 齐全。真实 `defineTool` 在 `apply` 时执行,schema 违规(如缺 `additionalProperties`)在这一步就红,无需启动 dsh。

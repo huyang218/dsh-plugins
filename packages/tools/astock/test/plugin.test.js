@@ -22,7 +22,11 @@ function fakeCtx() {
 
 test('exports the named plugin surface and no default export', () => {
   assert.ok(!('default' in plugin), 'default export would make the Loader drop name/inject')
-  assert.equal(plugin.name, 'dsh-plugin-astock')
+  // Upstream convention: the exported name is the SHORT plugin name (loader
+  // diagnostics), not the package name — dsh-storage-domain exports
+  // 'storage-domain', dsh-tool-bash exports 'tool-bash'.
+  assert.equal(plugin.name, 'astock')
+  assert.ok(!plugin.name.startsWith('dsh-plugin-'), 'the package prefix belongs in package.json only')
   assert.deepEqual(plugin.inject, ['tools', 'systemPrompt'])
   assert.equal(typeof plugin.apply, 'function')
 })

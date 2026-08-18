@@ -1,11 +1,12 @@
 {
   "name": "dsh-plugins",
   "private": true,
-  "description": "DeepSeek Harness plugin monorepo: generic plugins under packages/, per-customer bundles under customers/.",
+  "description": "Plugins for DeepSeek Harness (dsh), grouped by extension shape: tools/ give the model capabilities, runtime/ changes harness behavior, ui/ extends the web client.",
+  "license": "MIT",
   "workspaces": [
-    "packages/*"
+    "packages/*/*"
   ],
   "scripts": {
-    "test": "node --test 'packages/*/test/*.test.js'"
+    "test": "node --test 'packages/*/*/test/*.test.js'"
   }
 }

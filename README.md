@@ -1,27 +1,79 @@
 # dsh-plugins
 
-DeepSeek Harness 插件仓库。
+English | [中文](README.zh.md)
 
-## 结构
+Plugins for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
+(dsh), the "everything is a plugin" agent runtime built on Cordis.
 
-```
-packages/           通用插件(每个都是可安装的 dsh bundle)
-  astock/           A 股行情与技术指标工具(astock_data / astock_indicators / astock_quote / astock_search)
-  gateway-compat/   第三方 OpenAI 兼容网关适配:容忍流结束缺失 [DONE] 哨兵
-customers/          (预留)每客户一个 bundle:选插件 + 配参数,不放业务代码
-```
+Every package here is an installable dsh **bundle**: build-free, pure ESM, no
+compile step, so it installs straight from npm or git.
 
-## 安装到本地 profile
+## Plugins
+
+### `packages/tools/` — capabilities the model can call
+
+| Plugin | What it does |
+| --- | --- |
+| [`astock`](packages/tools/astock) | A-share quotes, K-lines, technical indicators, and whole-market batch tools for screening |
+
+### `packages/runtime/` — how the harness itself behaves
+
+| Plugin | What it does |
+| --- | --- |
+| [`gateway-compat`](packages/runtime/gateway-compat) | Tolerates OpenAI-style gateways whose SSE stream ends without `[DONE]` |
+
+### `packages/ui/` — web client extensions
+
+Empty for now.
+
+The top level splits by **extension shape**, because that is what decides how a
+plugin is written and reviewed: a tools plugin registers tools and is visible to
+the model; a runtime plugin listens on waterfall extension points and is not.
+Domain lives in the package name and its README.
+
+## Install
 
 ```sh
-dsh plugin --profile web add ./packages/astock
+dsh plugin --profile web add dsh-plugin-astock
 ```
 
-每个包在 `package.json` 里声明 `dsh.bundle` 指向自己的 `cordis.patch.yml`,安装后由 dsh 自动挂载配置层。
+Or from a checkout, which is also how you develop against a live profile:
 
-## 约定
+```sh
+dsh plugin --profile web add ./packages/tools/astock
+```
 
-- 通用插件不出现客户专属逻辑;部署差异一律走 Config 字段或 Provider 缝。
-- object schema 必须显式声明 `additionalProperties`(dsh 工具 schema 编译器强制)。
-- 每个插件带 `test/*.test.js` 单元测试(Node 内置 `node --test`,零依赖);根 `npm test` 跑全部,单包 `npm test -w <包名>`。
-- 发布给客户前:补 `prepare` 脚本(git 直装场景)或发私有 npm。
+Plugins that expose a Schemastery `Config` are configurable from your shell's
+plugin settings — no command line required for end users.
+
+## Develop
+
+```sh
+npm install          # root install; resolves peer deps for linked packages
+npm test             # every package
+npm test -w dsh-plugin-astock
+node --test packages/tools/astock/test/indicators.test.js
+```
+
+Tests use Node's built-in runner (`node:test`), so there are no test
+dependencies and nothing to build.
+
+[CLAUDE.md](CLAUDE.md) is the working spec for this repo: plugin lifecycle,
+config, tool authoring rules, waterfall extension points, bundle layering, the
+test convention, and the post-change verification checklist. It is written for
+AI coding agents but is the same set of rules a human contributor needs.
+
+### Adding a plugin
+
+1. Create `packages/<tools|runtime|ui>/<name>/` with `package.json`
+   (`"name": "dsh-plugin-<name>"`, `"type": "module"`, `main` → `lib/index.js`),
+   `cordis.patch.yml`, and `lib/index.js`.
+2. Declare the bundle: `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`,
+   and list `lib`, `cordis.patch.yml`, `LICENSE` in `files`.
+3. Export `name` / `inject` / `apply` as **named** exports — never a default
+   export, which makes the loader drop `inject`.
+4. Add `test/plugin.test.js` asserting the export shape and the registrations.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

@@ -23,7 +23,7 @@ import {
 import { fetchMarketQuotes } from './market.js';
 
 /** Cordis plugin name used by loader diagnostics. */
-const name = 'dsh-plugin-astock';
+const name = 'astock';
 
 /** Services required by this plugin. */
 const inject = ['tools', 'systemPrompt'];

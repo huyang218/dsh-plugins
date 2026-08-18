@@ -25,6 +25,7 @@ const streamClosed = { type: 'finish', reason: { kind: 'error', failure: { code:
 test('exports the named plugin surface and no default export', () => {
   assert.ok(!('default' in plugin), 'default export would make the Loader drop the namespace')
   assert.equal(plugin.name, 'gateway-compat')
+  assert.ok(!plugin.name.startsWith('dsh-plugin-'), 'the package prefix belongs in package.json only')
   assert.equal(typeof plugin.apply, 'function')
 })
 
