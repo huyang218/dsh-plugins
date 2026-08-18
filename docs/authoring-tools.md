@@ -8,8 +8,8 @@
 
 | Plugin | Covers | Needs credentials |
 | --- | --- | --- |
-| [**astock**](astock) | A-share **data**: quotes, K-lines, indicators, whole-market screening, financial statements, money flow, convertible bonds | Free by default; a [Tushare Pro](https://tushare.pro) token unlocks the rest |
-| [**ainfo**](ainfo) | A-share **information**: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token for everything |
+| [**astock**](../packages/astock) | A-share **data**: quotes, K-lines, indicators, whole-market screening, financial statements, money flow, convertible bonds | Free by default; a [Tushare Pro](https://tushare.pro) token unlocks the rest |
+| [**ainfo**](../packages/ainfo) | A-share **information**: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token for everything |
 
 ## What a tool owes its caller
 
@@ -47,7 +47,7 @@ single-item calls does not merely cost context — upstream providers throttle i
 and the run dies half-finished.
 
 Two rules follow, both learned the hard way (see
-[`astock`](astock) and the notes in [CLAUDE.md](../../CLAUDE.md)):
+[`astock`](../packages/astock) and the notes in [CLAUDE.md](../CLAUDE.md)):
 
 - **`render` returns a summary only.** Thousands of rows must never enter the
   model's context as text. The rows live in the canonical value, which the
@@ -72,4 +72,4 @@ Two rules follow, both learned the hard way (see
    `defineTool` runs there, so schema violations fail in unit tests rather than
    at dsh startup.
 
-Full rules: the "工具(defineTool)" section of [CLAUDE.md](../../CLAUDE.md).
+Full rules: the "工具(defineTool)" section of [CLAUDE.md](../CLAUDE.md).

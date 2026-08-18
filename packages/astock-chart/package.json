@@ -15,9 +15,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/huyang218/dsh-plugins.git",
-    "directory": "packages/ui/astock-chart"
+    "directory": "packages/astock-chart"
   },
-  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/ui/astock-chart#readme",
+  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/astock-chart#readme",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {

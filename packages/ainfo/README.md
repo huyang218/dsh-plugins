@@ -38,7 +38,7 @@ discovering it mid-answer.
 
 Tushare gates interfaces by account points, so a valid token may still be
 refused. The refusal names the requirement and is passed through as a
-permission error; see [dsh-plugin-tushare](../../runtime/tushare) for what each
+permission error; see [dsh-plugin-tushare](../tushare) for what each
 failure kind means.
 
 ## Two habits this plugin enforces

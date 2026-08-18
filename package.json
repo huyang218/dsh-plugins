@@ -1,12 +1,12 @@
 {
   "name": "dsh-plugins",
   "private": true,
-  "description": "Plugins for DeepSeek Harness (dsh), grouped by extension shape: tools/ give the model capabilities, runtime/ changes harness behavior, ui/ extends the web client.",
+  "description": "Plugins for DeepSeek Harness (dsh). One directory per plugin; what each one extends is declared by dsh.category — tools/ capabilities, runtime/ harness behaviour, ui/ web client.",
   "license": "MIT",
   "workspaces": [
-    "packages/*/*"
+    "packages/*"
   ],
   "scripts": {
-    "test": "node --test 'packages/*/*/test/*.test.js' 'test/*.test.js'"
+    "test": "node --test 'packages/*/test/*.test.js' 'test/*.test.js'"
   }
 }

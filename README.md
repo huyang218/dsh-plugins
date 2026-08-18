@@ -22,13 +22,13 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 
 | Plugin | Group | What it does | Credentials |
 | --- | --- | --- | --- |
-| [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A-share market data: quotes, K-lines, indicators, whole-market screening, financial statements, money flow, convertible bonds | free, plus Tushare-only tools |
-| [**ainfo**](packages/tools/ainfo) | [`tools`](packages/tools) | A-share information: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token |
-| [**astock-chart**](packages/ui/astock-chart) | [`ui`](packages/ui) | Renders `astock_data` results as a candlestick chart with volume, inside the reply | — |
-| [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
-| [**tool-health**](packages/runtime/tool-health) | [`runtime`](packages/runtime) | Remembers which tools have been failing, across sessions, and tells the next session before it starts work | — |
-| [**tool-usage**](packages/runtime/tool-usage) | [`runtime`](packages/runtime) | Measures what a session spends on tools — calls, duration percentiles, failures — with an optional budget warning | — |
-| [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel | — |
+| [**astock**](packages/astock) | [`tools`](docs/authoring-tools.md) | A-share market data: quotes, K-lines, indicators, whole-market screening, financial statements, money flow, convertible bonds | free, plus Tushare-only tools |
+| [**ainfo**](packages/ainfo) | [`tools`](docs/authoring-tools.md) | A-share information: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token |
+| [**astock-chart**](packages/astock-chart) | [`ui`](docs/authoring-ui.md) | Renders `astock_data` results as a candlestick chart with volume, inside the reply | — |
+| [**tushare**](packages/tushare) | [`runtime`](docs/authoring-runtime.md) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
+| [**tool-health**](packages/tool-health) | [`runtime`](docs/authoring-runtime.md) | Remembers which tools have been failing, across sessions, and tells the next session before it starts work | — |
+| [**tool-usage**](packages/tool-usage) | [`runtime`](docs/authoring-runtime.md) | Measures what a session spends on tools — calls, duration percentiles, failures — with an optional budget warning | — |
+| [**gateway-compat**](packages/gateway-compat) | [`runtime`](docs/authoring-runtime.md) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel | — |
 
 > [!NOTE]
 > Finance plugins share one credential through the `tushare` provider rather
@@ -38,27 +38,35 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 
 ### Groups
 
-| Directory | Holds | Visible to the model |
-| --- | --- | :---: |
-| [**`tools/`**](packages/tools) | Capabilities the model can call | yes |
-| [**`runtime/`**](packages/runtime) | Waterfall wrappers and shared services | no |
-| [**`ui/`**](packages/ui) | Web client extensions | in the browser |
+Every plugin sits directly in `packages/<name>/`, because that is where the
+ecosystem's scanners look — nothing in the catalogue of 1,342 plugins nests
+deeper. What a plugin extends is declared as metadata (`dsh.category`) rather
+than by a parent directory:
 
-Each group's README carries the conventions and pitfalls of that shape.
+| `dsh.category` | Holds | Visible to the model | Conventions |
+| --- | --- | :---: | --- |
+| `tools/…` | Capabilities the model can call | yes | [authoring-tools](docs/authoring-tools.md) |
+| `runtime/…` | Waterfall wrappers and shared services | no | [authoring-runtime](docs/authoring-runtime.md) |
+| `ui/…` | Web client extensions | in the browser | [authoring-ui](docs/authoring-ui.md) |
 
 ## Why the layout
 
-The top level splits by **extension shape** — what a plugin does to the harness
-— because that is what decides how it is written, reviewed and tested:
+The directory tree is flat because the ecosystem reads it: plugin catalogues
+and in-app markets look for `packages/<name>/package.json`, and a repo that
+nests deeper is not found at all.
+
+The grouping still matters — it is what decides how a plugin is written,
+reviewed and tested — so it lives in `dsh.category` instead:
 
 - a **tools** plugin registers tools, is visible to the model, and lives or
   dies by its output schema;
-- a **runtime** plugin listens on waterfall extension points, is invisible to
-  the model, and must never turn a real failure into a fake success;
-- a **ui** plugin ships a client bundle and usually needs a build.
+- a **runtime** plugin listens on waterfall extension points or provides a
+  shared service, is invisible to the model, and must never turn a real
+  failure into a fake success;
+- a **ui** plugin ships a client bundle the web client loads.
 
 Subject matter (finance, devtools, …) lives in the package name and its README,
-not in the directory tree, so a plugin never has to be filed twice.
+so a plugin never has to be filed twice.
 
 Each group has its own README with the conventions and pitfalls for that shape.
 
@@ -74,7 +82,7 @@ Or from a checkout — also how you develop against a running profile, since the
 install is a symlink and edits take effect on the next service restart:
 
 ```sh
-dsh plugin --profile web add ./packages/tools/astock
+dsh plugin --profile web add ./packages/astock
 ```
 
 Verify it landed in the composed tree before starting anything:
@@ -107,7 +115,7 @@ also write by hand:
 npm install                                        # root; resolves peer deps for every package
 npm test                                           # every package
 npm test -w dsh-plugin-astock                      # one package
-node --test packages/tools/astock/test/*.test.js   # one file
+node --test packages/astock/test/*.test.js   # one file
 ```
 
 Tests use Node's built-in runner (`node:test`) — no test dependencies, no build,
@@ -126,9 +134,9 @@ are the same ones a human contributor needs.
 
 ## Contributing
 
-1. Pick the group that matches the extension shape and read its README.
-2. Create `packages/<group>/<name>/` with `package.json`, `cordis.patch.yml`,
-   `lib/index.js`, `README.md` and `LICENSE`.
+1. Pick the group that matches the extension shape and read its guide in `docs/`.
+2. Create `packages/<name>/` with `package.json` (including `dsh.category`),
+   `cordis.patch.yml`, `lib/index.js`, `README.md` and `LICENSE`.
 3. Export `name` / `inject` / `apply` as **named** exports. A default export
    makes the loader drop `inject`, and the plugin then fails in a way that
    looks like something else entirely.

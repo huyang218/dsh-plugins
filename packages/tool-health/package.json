@@ -1,23 +1,22 @@
 {
-  "name": "dsh-plugin-tool-usage",
+  "name": "dsh-plugin-tool-health",
   "version": "0.1.0",
-  "description": "Measures what a DeepSeek Harness session spends on tools: calls, duration percentiles and failures per tool, exposed as a service, with an optional budget warning when a session runs heavy.",
+  "description": "Remembers which DeepSeek Harness tools have been failing, across sessions, and tells the next session — so an agent stops rediscovering a dead endpoint one failed call at a time.",
   "license": "MIT",
   "keywords": [
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
     "observability",
-    "metrics",
-    "usage",
-    "cost"
+    "reliability",
+    "memory"
   ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/huyang218/dsh-plugins.git",
-    "directory": "packages/runtime/tool-usage"
+    "directory": "packages/tool-health"
   },
-  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/runtime/tool-usage#readme",
+  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/tool-health#readme",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
@@ -36,8 +35,9 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "zod": "^4.0.0"
   }
 }

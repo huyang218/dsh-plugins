@@ -11,10 +11,10 @@ model's behaviour changes because the machinery around it changed.
 
 | Plugin | Shape | What it does |
 | --- | --- | --- |
-| [**gateway-compat**](gateway-compat) | `llm/stream` listener | Tolerates OpenAI-style gateways whose SSE stream ends without the `[DONE]` sentinel |
-| [**tool-health**](tool-health) | `tools/result` observer | Remembers which tools have been failing across sessions and warns the next one |
-| [**tool-usage**](tool-usage) | `tools/execute` wrapper | Measures calls, duration percentiles and failures per tool; exposes the `toolUsage` service |
-| [**tushare**](tushare) | `tushare` service | Shared Tushare Pro access for the finance plugins: one token, one quota gate, one calendar, and typed failures |
+| [**gateway-compat**](../packages/gateway-compat) | `llm/stream` listener | Tolerates OpenAI-style gateways whose SSE stream ends without the `[DONE]` sentinel |
+| [**tool-health**](../packages/tool-health) | `tools/result` observer | Remembers which tools have been failing across sessions and warns the next one |
+| [**tool-usage**](../packages/tool-usage) | `tools/execute` wrapper | Measures calls, duration percentiles and failures per tool; exposes the `toolUsage` service |
+| [**tushare**](../packages/tushare) | `tushare` service | Shared Tushare Pro access for the finance plugins: one token, one quota gate, one calendar, and typed failures |
 
 Two shapes live here, and both are invisible to the model: **waterfall
 listeners**, which change how the harness runs, and **service providers**,
@@ -74,4 +74,4 @@ what hides real errors in production.
 3. Say in the README what it rewrites and, just as importantly, what it
    deliberately leaves alone.
 
-Full rules: the "事件(waterfall)" section of [CLAUDE.md](../../CLAUDE.md).
+Full rules: the "事件(waterfall)" section of [CLAUDE.md](../CLAUDE.md).

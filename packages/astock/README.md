@@ -27,7 +27,7 @@ dsh plugin --profile web add dsh-plugin-tushare
 ```
 
 The token lives on the provider, not here, so every finance plugin shares one
-token and one quota. See [dsh-plugin-tushare](../../runtime/tushare) for what
+token and one quota. See [dsh-plugin-tushare](../tushare) for what
 Tushare charges for and what a permission failure tells the agent.
 
 ## Tools

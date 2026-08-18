@@ -15,9 +15,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/huyang218/dsh-plugins.git",
-    "directory": "packages/runtime/gateway-compat"
+    "directory": "packages/gateway-compat"
   },
-  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/runtime/gateway-compat#readme",
+  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/gateway-compat#readme",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {

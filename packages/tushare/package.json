@@ -15,9 +15,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/huyang218/dsh-plugins.git",
-    "directory": "packages/runtime/tushare"
+    "directory": "packages/tushare"
   },
-  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/runtime/tushare#readme",
+  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/tushare#readme",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {

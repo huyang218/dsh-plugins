@@ -7,7 +7,7 @@ chart with a volume band instead of a table of numbers.
 dsh plugin --profile web add dsh-plugin-astock-chart
 ```
 
-Needs [`dsh-plugin-astock`](../../tools/astock) for the data, and the web
+Needs [`dsh-plugin-astock`](../astock) for the data, and the web
 client for the card. Restart the service after installing; the browser picks
 the bundle up on the next load.
 

@@ -8,7 +8,7 @@
 
 | Plugin | What it renders |
 | --- | --- |
-| [**astock-chart**](astock-chart) | `astock_data` results as a candlestick chart with volume, in the reply |
+| [**astock-chart**](../packages/astock-chart) | `astock_data` results as a candlestick chart with volume, in the reply |
 
 ## What a UI plugin looks like
 
@@ -42,7 +42,7 @@ has the exact steps.
   runs cannot be installed straight from git without the user authorizing build
   scripts — so publish it to npm with the built output, or, when the card has
   no npm dependencies of its own, hand-write that small wrapper and stay
-  build-free, as [`astock-chart`](astock-chart) does.
+  build-free, as [`astock-chart`](../packages/astock-chart) does.
 - **A route reachable from the web UI is reachable by anyone who can reach the
   UI.** If a route installs software, spends money, or restarts the service,
   say so plainly in the plugin's README and make the dangerous part opt-in

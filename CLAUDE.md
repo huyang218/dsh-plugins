@@ -6,15 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 DeepSeek Harness(dsh)的插件 monorepo,**面向开源发布**(MIT)。dsh 是"一切皆插件"的 agent 运行框架(基于 Cordis)。
 
-目录按**扩展形态**分层——决定插件怎么写、怎么审的是这个维度,不是业务场景:
+目录**一层平铺**:`packages/<名字>/`,一个插件一个目录。这不是审美选择——**生态的扫描器只认这一层**(插件目录站、应用内市场都按 `packages/<name>/package.json` 抓取;官方目录 1342 个插件里,子路径两层的是 0 个),嵌得更深的仓库根本不会被发现。
+
+分组改由 **`package.json` 的 `dsh.category`** 承载,写法 `<组>/<领域>`:
 
 ```
-packages/tools/      模型可调用的能力(注册工具,对模型可见)     astock(数据面)、ainfo(信息面)
-packages/runtime/    对模型不可见的东西:waterfall 包装与共享服务  gateway-compat、tushare(provider)
-packages/ui/         Web 客户端扩展(暂空)
+tools/…      模型可调用的能力(注册工具,对模型可见)      astock(数据面)、ainfo(信息面)
+runtime/…    对模型不可见:waterfall 包装与共享服务       gateway-compat、tushare、tool-health、tool-usage
+ui/…         Web 客户端扩展                            astock-chart
 ```
 
-业务场景由包名和各自 README 体现,不进目录结构。客户定制组合(`customers/*`)不放在这个公开仓库里。
+三种形态各自的约定和坑写在 `docs/authoring-{tools,runtime,ui}.md`。业务场景由包名和各自 README 体现。客户定制组合不放在这个公开仓库里。
 
 - 参考文档:dsh 源码仓库在 `~/Documents/code/open/deepseek-harness`,插件开发看 `docs/user/develop/`(入门)、`docs/cookbook/adding-a-tool.md`(工具进阶)、`docs/cookbook/extension-cookbook.md`(扩展形态)、`docs/architecture.md`(扩展点总表)。
 - 本机的 dsh 以桌面壳应用 "dsh Desktop.app" 运行(壳项目在 `~/Documents/code/alpha/dsh-desktop`,原名 dsh-shell,已装到 `/Applications`)。改壳代码后要重新打包并部署:`npx electron-builder --mac dir` → 退出应用 → `ditto dist/mac-arm64/"dsh Desktop.app" /Applications/`(菜单的"重启服务"只重启 dsh 服务进程,不加载新的壳代码)。
@@ -26,7 +28,7 @@ packages/ui/         Web 客户端扩展(暂空)
 - dsh 运行时(npm 安装的 `@deepseek-ai/dsh`)在 `~/Library/Application Support/dsh-desktop/runtime/slot-a|slot-b`,CLI 入口:`node "<slot>/node_modules/@deepseek-ai/dsh/lib/bin.js"`。命令行操作 profile 前必须 `export DSH_HOME` 为上述路径。
 - 改插件代码后:通过应用菜单栏 `dsh → 重启服务`(或托盘菜单)生效;插件是 `link:` 链接,无需重装。
 - 服务/启动日志:`~/Library/Application Support/dsh-desktop/dsh-desktop.log`。会话日志(调试模型可见行为的事实来源):`$DSH_HOME/sessions/**/session.jsonl.zstd`,用 `zstd -dc` 解压看事件流。
-- 模型走 tokenhub.tencentmaas.com 网关(OpenAI 兼容,但不发 SSE `[DONE]`):`packages/runtime/gateway-compat` 插件与 home 级补丁 `$DSH_HOME/cordis.patch.yml` 里的 `llm-deepseek` retryPolicy(含 `STREAM_CLOSED`)共同兜底。改动网关相关行为前先读这两处。
+- 模型走 tokenhub.tencentmaas.com 网关(OpenAI 兼容,但不发 SSE `[DONE]`):`packages/gateway-compat` 插件与 home 级补丁 `$DSH_HOME/cordis.patch.yml` 里的 `llm-deepseek` retryPolicy(含 `STREAM_CLOSED`)共同兜底。改动网关相关行为前先读这两处。
 
 ## 常用命令
 
@@ -35,16 +37,16 @@ npm install                       # monorepo 根;为 link: 插件提供 peer 依
 npm test                          # 全部单元测试;单包:npm test -w dsh-plugin-<name>
 export DSH_HOME="$HOME/Library/Application Support/dsh-desktop/dsh-home"
 BIN="$HOME/Library/Application Support/dsh-desktop/runtime/slot-a/node_modules/@deepseek-ai/dsh/lib/bin.js"
-node "$BIN" plugin --profile web add ./packages/tools/<name>   # 安装插件到 web profile
+node "$BIN" plugin --profile web add ./packages/<name>         # 安装插件到 web profile
 node "$BIN" plugin --profile web remove <package-name>     # 卸载
 node "$BIN" --profile web --dump-config                    # 不启动,验证组合树里的插件行
 node "$BIN" --profile headless "任务描述"                   # 端到端验证(走真实模型,消耗 API 额度)
-node -e "import('<abs>/packages/<类型>/<name>/lib/index.js').then(m => console.log(Object.keys(m)))"  # 纯加载冒烟
+node -e "import('<abs>/packages/<name>/lib/index.js').then(m => console.log(Object.keys(m)))"  # 纯加载冒烟
 ```
 
 ## 插件结构约定
 
-每个 `packages/<类型>/<name>/`(`<类型>` = `tools` / `runtime` / `ui`):
+每个 `packages/<name>/`:
 
 ```
 package.json      # name 为 dsh-plugin-<name>;"type": "module";main 指向 lib/index.js
@@ -63,7 +65,7 @@ cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
 
 - `package.json` 必须声明 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`,`files` 包含 `lib` 和 `cordis.patch.yml`。
 - 用到的 dsh 包(`@deepseek-ai/dsh-tools` 等)写进 `peerDependencies`;monorepo 根的 `npm install` 负责让符号链接位置能解析到它们。不要在单个插件目录里建 node_modules。
-- 开源包元数据:`license: MIT` + 各包自带 `LICENSE`(进 `files`)、`repository.directory` 指到包目录、`keywords` 含 `dsh-plugin`(插件市场靠它发现)、`dsh.category` 写 `tools/finance` 这类分类。**不要写 `private: true`**——本仓库插件免构建纯 ESM,发 npm 后用户一键安装无需构建授权(git 直装则要求用户在 `pnpm-workspace.yaml` 里 `allowBuilds`)。
+- 开源包元数据:`dsh.category`(分组靠它,不靠目录)、`license: MIT` + 各包自带 `LICENSE`(进 `files`)、`repository.directory` 指到包目录、`keywords` 含 `dsh-plugin`(插件市场靠它发现)、`dsh.category` 写 `tools/finance` 这类分类。**不要写 `private: true`**——本仓库插件免构建纯 ESM,发 npm 后用户一键安装无需构建授权(git 直装则要求用户在 `pnpm-workspace.yaml` 里 `allowBuilds`)。
 - 每个插件包必须有自己的 `README.md`:它就是 npm 页面,也是用户判断要不要装的唯一依据。
 
 ## 现有插件(改动前先读对应入口)
@@ -80,13 +82,13 @@ cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
   - Tushare 工具走**嵌套 `ctx.inject(['tushare'], ...)`**,不是顶层 inject:顶层声明会让没装 provider 的用户连免费的东财工具都用不上。
   - 缺失值铁律:东方财富用 `'-'`、Tushare 用 `null` 表示缺失,而 `Number(null) === 0`——一律走 `lib/value.js` 的 `finiteNumber` / `assignFinite`(provider 也导出同名助手供其他包用),缺失字段**整个键省略**,绝不写成 0 或 NaN(闭合 schema 下 NaN 会让整次调用变成 isError)。
   - 可转债代码按**前两位**分交易所(11x=沪、12x=深),套用股票的首位映射会把所有深市转债发到上交所(踩过);`moneyflow_hsgt` 不接受 `limit`,只能按日期区间取(踩过)。
-- **tushare**(provider,`packages/runtime/tushare`):金融插件共用的 Tushare Pro 接入,`ctx.provide('tushare', ...)` 暴露 `query` / `tradeDates` / `access` / `configured`。**凭证只配一次**,配额闸也只有一个——Tushare 按账号计量,四个插件各自限流仍会超。
+- **tushare**(provider,`packages/tushare`):金融插件共用的 Tushare Pro 接入,`ctx.provide('tushare', ...)` 暴露 `query` / `tradeDates` / `access` / `configured`。**凭证只配一次**,配额闸也只有一个——Tushare 按账号计量,四个插件各自限流仍会超。
   - **错误必须分类**(用户明确要求):Tushare 一律返回 HTTP 200、把失败写在 body 里,且积分不足 / 频率超限 / 参数错误**都是 code 40203**。三者处置相反,所以 client 把它们分成 `no-token` / `access-denied` / `rate-limited` / `provider-error` / `transport`,**先判权限再判限流**(权限问题重试只会更慢地失败),并原样透传 Tushare 自己的说明(里面有当前积分门槛)。
   - **权限/token 错误的文案要明确要求模型别自己找补**:真实事故是模型只被告知「数据不可用」,就去解压会话日志、伪造 /tmp 数据文件,最后自信地给出错答案。
-- **ainfo**(`packages/tools/ainfo`):A 股信息面——新闻、券商研报评级、业绩预告、分红、股东增减持、限售解禁、十大股东。与 astock 分开是因为问题域不同(筛选 40 日最低价用不到这些),而每个注册的工具都会在**每次请求**里占系统提示词预算。全部需要 Tushare token 且**无免费替代**。文本字段原样透传不做改写(改写过的标题模型就无法引用了);新闻正文是唯一例外——源数据带 HTML,要剥成纯文本并截断,且必须标明是摘要。
-- **tool-health**(`packages/runtime/tool-health`):监听 `tools/result`(实证:**Code Mode 的子调用也会触发这个钩子**——线上 `tool_health.json` 里同时记着 `run_code`、`astock_data`、`astock_market_bars`,所以观测在两种呈现模式下都成立)(**emit 模式,不是 waterfall**,所以无需也无法改写结果)记录每个工具的调用/失败/连续失败次数与最后一次错误,用 storage 域跨会话持久化,再用 `ctx.systemPrompt.context({ text: fn })`(**text 可以是函数、每次组装求值**)把当前坏掉的工具报给模型。三个判断:按**连续失败**而不是失败率(五十次错一次是健康的,连错三次不是);失败会**过期**(默认 24 小时,否则会教模型躲开其实已恢复的工具);健康时返回空串(常驻「一切正常」横幅是在每次请求上花 token 说废话)。storage 用嵌套 inject,没有存储后端时退化为单会话可用而不是拒绝加载。
-- **tool-usage**(`packages/runtime/tool-usage`):包装 `tools/execute`(**Code Mode 下会重复计时**,踩过:`run_code` 的耗时本就包含它派发的子调用,全部加总会把 100ms 报成 204ms,预算也在一半阈值就误触发。按 `exec.parent` 区分:每个工具仍计自己的全部调用,但**会话总耗时只算顶层调用**;预算提醒点名的是真正干活的那个子调用,而不是 `run_code` 这个传输壳)(**waterfall,必须转发 `next()` 并原样返回其结果**——改了结果的度量插件是 bug 不是度量)计量每个工具的调用次数、耗时分位数与失败数,在 `finally` 里记账所以抛异常的调用也算(否则最烂的工具看起来最便宜)。暴露 `toolUsage` 服务而**不注册工具**:注册工具等于在每次请求的提示词里描述一份没人要的报表。可选预算(`budgetCalls`/`budgetSeconds`),超了才在提示词里提醒,并给出**具体做法**(改批量、收窄窗口、复用已取数据)而不是只说「你很慢」。分位数只保留最近 200 条样本——分位数要反映工具「现在」的表现。
-- **astock-chart**(`packages/ui/astock-chart`,仓库第一个 UI 插件):把 `astock_data` 的结果画成 K 线图。三个必须记住的事实:①**卡片只能拿到 `presentationMeta`**——规范值是执行期本地的,既不进卡片也不进回放,所以要画图就得把数据投影到 result meta 上(会随会话日志持久化,因此要打包并限量,现为 120 根);②接入点是客户端 `tool.call.toolview` 插槽,**按工具名 key 注册**,没注册的工具走 ui-tool 的通用卡片——所以画不了时**返回 null** 让通用卡片保留,而不是给个空盒子;②b **Code Mode 下没有卡片**(踩过,实证:code-dispatch 事件只带 `content`/`isError`,无 `meta`)——嵌套 Code 分发会跳过 `presentationMeta` 投影,所以纯 `code` 预设下这张卡片永远拿不到数据。本机因此用自有预设 `code-both`(出厂 `code` 的副本,`mode: both`):批量筛选照走 run_code,单只查询走原生调用才有卡片。**凡是依赖卡片/presentationMeta 的插件,都要在 README 里写明它需要 native 或 both 呈现模式。**③**客户端插件也要声明 `inject`**(踩过):读 `ctx.slots` 却没导出 `inject = ['slots']`,Cordis 会拒绝该属性,**整个 entry apply 失败**,浏览器直接显示「Failed to load plugins」而不是少一张卡片;同时 `package.json` 的 `dsh.client.inject` 要列出提供这些服务的客户端包(`@deepseek-ai/dsh-client-ui-slots` 等),那是模块图的加载顺序。④客户端必须是 **`window.__ModuleLoader__.load({ id, factory })` 工厂格式的产物**,host 扫描 `exports["./client"]` 后服务给浏览器。本包因为除 react(由 host 经 `require` 注入)外零依赖,**手写了这个外壳、不引入前端构建链**,测试直接加载发布产物本身。
+- **ainfo**(`packages/ainfo`):A 股信息面——新闻、券商研报评级、业绩预告、分红、股东增减持、限售解禁、十大股东。与 astock 分开是因为问题域不同(筛选 40 日最低价用不到这些),而每个注册的工具都会在**每次请求**里占系统提示词预算。全部需要 Tushare token 且**无免费替代**。文本字段原样透传不做改写(改写过的标题模型就无法引用了);新闻正文是唯一例外——源数据带 HTML,要剥成纯文本并截断,且必须标明是摘要。
+- **tool-health**(`packages/tool-health`):监听 `tools/result`(实证:**Code Mode 的子调用也会触发这个钩子**——线上 `tool_health.json` 里同时记着 `run_code`、`astock_data`、`astock_market_bars`,所以观测在两种呈现模式下都成立)(**emit 模式,不是 waterfall**,所以无需也无法改写结果)记录每个工具的调用/失败/连续失败次数与最后一次错误,用 storage 域跨会话持久化,再用 `ctx.systemPrompt.context({ text: fn })`(**text 可以是函数、每次组装求值**)把当前坏掉的工具报给模型。三个判断:按**连续失败**而不是失败率(五十次错一次是健康的,连错三次不是);失败会**过期**(默认 24 小时,否则会教模型躲开其实已恢复的工具);健康时返回空串(常驻「一切正常」横幅是在每次请求上花 token 说废话)。storage 用嵌套 inject,没有存储后端时退化为单会话可用而不是拒绝加载。
+- **tool-usage**(`packages/tool-usage`):包装 `tools/execute`(**Code Mode 下会重复计时**,踩过:`run_code` 的耗时本就包含它派发的子调用,全部加总会把 100ms 报成 204ms,预算也在一半阈值就误触发。按 `exec.parent` 区分:每个工具仍计自己的全部调用,但**会话总耗时只算顶层调用**;预算提醒点名的是真正干活的那个子调用,而不是 `run_code` 这个传输壳)(**waterfall,必须转发 `next()` 并原样返回其结果**——改了结果的度量插件是 bug 不是度量)计量每个工具的调用次数、耗时分位数与失败数,在 `finally` 里记账所以抛异常的调用也算(否则最烂的工具看起来最便宜)。暴露 `toolUsage` 服务而**不注册工具**:注册工具等于在每次请求的提示词里描述一份没人要的报表。可选预算(`budgetCalls`/`budgetSeconds`),超了才在提示词里提醒,并给出**具体做法**(改批量、收窄窗口、复用已取数据)而不是只说「你很慢」。分位数只保留最近 200 条样本——分位数要反映工具「现在」的表现。
+- **astock-chart**(`packages/astock-chart`,仓库第一个 UI 插件):把 `astock_data` 的结果画成 K 线图。三个必须记住的事实:①**卡片只能拿到 `presentationMeta`**——规范值是执行期本地的,既不进卡片也不进回放,所以要画图就得把数据投影到 result meta 上(会随会话日志持久化,因此要打包并限量,现为 120 根);②接入点是客户端 `tool.call.toolview` 插槽,**按工具名 key 注册**,没注册的工具走 ui-tool 的通用卡片——所以画不了时**返回 null** 让通用卡片保留,而不是给个空盒子;②b **Code Mode 下没有卡片**(踩过,实证:code-dispatch 事件只带 `content`/`isError`,无 `meta`)——嵌套 Code 分发会跳过 `presentationMeta` 投影,所以纯 `code` 预设下这张卡片永远拿不到数据。本机因此用自有预设 `code-both`(出厂 `code` 的副本,`mode: both`):批量筛选照走 run_code,单只查询走原生调用才有卡片。**凡是依赖卡片/presentationMeta 的插件,都要在 README 里写明它需要 native 或 both 呈现模式。**③**客户端插件也要声明 `inject`**(踩过):读 `ctx.slots` 却没导出 `inject = ['slots']`,Cordis 会拒绝该属性,**整个 entry apply 失败**,浏览器直接显示「Failed to load plugins」而不是少一张卡片;同时 `package.json` 的 `dsh.client.inject` 要列出提供这些服务的客户端包(`@deepseek-ai/dsh-client-ui-slots` 等),那是模块图的加载顺序。④客户端必须是 **`window.__ModuleLoader__.load({ id, factory })` 工厂格式的产物**,host 扫描 `exports["./client"]` 后服务给浏览器。本包因为除 react(由 host 经 `require` 注入)外零依赖,**手写了这个外壳、不引入前端构建链**,测试直接加载发布产物本身。
 - **gateway-compat**:`llm/stream` waterfall 包装的参考实现——把网关缺失 `[DONE]` 导致的 `STREAM_CLOSED` 终止错误改写为正常 `stop`,但仅在已收到正文且无 tool call 进行中时,真正的中途断流仍然失败并保留重试资格。
 
 ## dsh 插件开发规范(违反会启动崩溃或静默失效)
@@ -123,8 +125,8 @@ cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
 
 用 Node 内置 test runner(`node:test` + `node:assert/strict`),零依赖、免构建,与插件"纯 ESM 直接加载"一致(上游 dsh 用 vitest,不适用本仓库)。
 
-- **位置**:每个包 `packages/<类型>/<name>/test/*.test.js`,测试与被测包同住;`files` 不含 `test`,不随包发布。
-- **命令**:根 `npm test` 跑全部;单包 `npm test -w <package-name>`(或 cd 进包目录跑 `npm test`);单文件 `node --test packages/<类型>/<name>/test/<file>.test.js`。
+- **位置**:每个包 `packages/<name>/test/*.test.js`,测试与被测包同住;`files` 不含 `test`,不随包发布。
+- **命令**:根 `npm test` 跑全部;单包 `npm test -w <package-name>`(或 cd 进包目录跑 `npm test`);单文件 `node --test packages/<name>/test/<file>.test.js`。
 - **测真实入口**:`import * as plugin from '../lib/index.js'`(发布产物路径)。每个插件必须有一个入口测试(参照两个包的 `test/plugin.test.js`):
   - 断言 `!('default' in plugin)` 且命名导出 `name` / `apply`(有依赖的还有 `inject`)——防"default 导出丢 inject"回归;
   - 用 fake ctx(只需捕获 `tools.register` / `systemPrompt.section` / `on`)调 `apply`,断言注册的工具名与 section 齐全。真实 `defineTool` 在 `apply` 时执行,schema 违规(如缺 `additionalProperties`)在这一步就红,无需启动 dsh。

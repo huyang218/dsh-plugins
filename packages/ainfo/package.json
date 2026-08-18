@@ -16,9 +16,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/huyang218/dsh-plugins.git",
-    "directory": "packages/tools/ainfo"
+    "directory": "packages/ainfo"
   },
-  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/tools/ainfo#readme",
+  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/ainfo#readme",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {

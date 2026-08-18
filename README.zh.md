@@ -22,13 +22,13 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 
 | 插件 | 分组 | 作用 | 凭证 |
 | --- | --- | --- | --- |
-| [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A 股数据面:行情、K 线、指标、全市场筛选、财务报表、资金流向、可转债 | 免费,部分工具需 Tushare |
-| [**ainfo**](packages/tools/ainfo) | [`tools`](packages/tools) | A 股信息面:新闻、券商研报、业绩预告、分红、股东增减持、十大股东 | 需 Tushare token |
-| [**astock-chart**](packages/ui/astock-chart) | [`ui`](packages/ui) | 把 `astock_data` 的结果直接画成带成交量的 K 线图,就在回复里 | — |
-| [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | — |
-| [**tool-health**](packages/runtime/tool-health) | [`runtime`](packages/runtime) | 跨会话记住哪些工具在失败,并在下一次会话开始前就告诉模型 | — |
-| [**tool-usage**](packages/runtime/tool-usage) | [`runtime`](packages/runtime) | 计量一次会话在工具上的花费:调用次数、耗时分位数、失败率,并可设预算提醒 | — |
-| [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 | — |
+| [**astock**](packages/astock) | [`tools`](docs/authoring-tools.md) | A 股数据面:行情、K 线、指标、全市场筛选、财务报表、资金流向、可转债 | 免费,部分工具需 Tushare |
+| [**ainfo**](packages/ainfo) | [`tools`](docs/authoring-tools.md) | A 股信息面:新闻、券商研报、业绩预告、分红、股东增减持、十大股东 | 需 Tushare token |
+| [**astock-chart**](packages/astock-chart) | [`ui`](docs/authoring-ui.md) | 把 `astock_data` 的结果直接画成带成交量的 K 线图,就在回复里 | — |
+| [**tushare**](packages/tushare) | [`runtime`](docs/authoring-runtime.md) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | — |
+| [**tool-health**](packages/tool-health) | [`runtime`](docs/authoring-runtime.md) | 跨会话记住哪些工具在失败,并在下一次会话开始前就告诉模型 | — |
+| [**tool-usage**](packages/tool-usage) | [`runtime`](docs/authoring-runtime.md) | 计量一次会话在工具上的花费:调用次数、耗时分位数、失败率,并可设预算提醒 | — |
+| [**gateway-compat**](packages/gateway-compat) | [`runtime`](docs/authoring-runtime.md) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 | — |
 
 > [!NOTE]
 > 金融插件通过 `tushare` provider 共用一份凭证,而不是各自向用户要同一个 token。
@@ -37,26 +37,29 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 
 ### 分组
 
-| 目录 | 放什么 | 对模型可见 |
-| --- | --- | :---: |
-| [**`tools/`**](packages/tools) | 模型可调用的能力 | 是 |
-| [**`runtime/`**](packages/runtime) | waterfall 包装与共享服务 | 否 |
-| [**`ui/`**](packages/ui) | Web 客户端扩展 | 在浏览器里 |
+每个插件都直接放在 `packages/<名字>/` —— 生态的扫描器只认这一层,目录里 1342 个
+插件没有一个嵌得更深。插件扩展的是什么,改由元数据 `dsh.category` 声明,而不是靠父目录:
 
-每个分组的 README 写清该形态特有的约定和坑。
+| `dsh.category` | 放什么 | 对模型可见 | 约定 |
+| --- | --- | :---: | --- |
+| `tools/…` | 模型可调用的能力 | 是 | [authoring-tools](docs/authoring-tools.md) |
+| `runtime/…` | waterfall 包装与共享服务 | 否 | [authoring-runtime](docs/authoring-runtime.md) |
+| `ui/…` | Web 客户端扩展 | 在浏览器里 | [authoring-ui](docs/authoring-ui.md) |
 
 ## 为什么这样分
 
-顶层按**扩展形态**分——即「这个插件对 harness 做了什么」——因为决定它怎么写、
-怎么审、怎么测的正是这个维度:
+目录是平的,因为生态要读它:插件目录站和应用内市场都按 `packages/<名字>/package.json`
+扫描,嵌得更深的仓库根本不会被发现。
+
+但分组本身仍然重要——决定插件怎么写、怎么审、怎么测的正是它——所以改由 `dsh.category`
+承载:
 
 - **tools** 插件注册工具、对模型可见,成败取决于 output schema;
-- **runtime** 插件挂在 waterfall 扩展点上、对模型不可见,底线是绝不能把真实失败
-  改写成虚假成功;
-- **ui** 插件要发客户端产物,通常需要构建。
+- **runtime** 插件挂在 waterfall 扩展点上、或提供共享服务,对模型不可见,底线是
+  绝不能把真实失败改写成虚假成功;
+- **ui** 插件发客户端产物,由 Web 客户端加载。
 
-业务领域(金融、开发工具……)由包名和各自 README 体现,不进目录树,这样一个插件
-不会需要归两次类。
+业务领域(金融、开发工具……)由包名和各自 README 体现,这样一个插件不会需要归两次类。
 
 每个分组都有自己的 README,写清该形态特有的约定和坑。
 
@@ -72,7 +75,7 @@ dsh plugin --profile web add dsh-plugin-astock
 链接,改完代码重启服务即可生效:
 
 ```sh
-dsh plugin --profile web add ./packages/tools/astock
+dsh plugin --profile web add ./packages/astock
 ```
 
 启动前先确认它进了组合树:
@@ -103,7 +106,7 @@ dsh --profile web --dump-config      # 看插件对应的那一行
 npm install                                        # 仓库根;为所有包解析 peer 依赖
 npm test                                           # 全部包
 npm test -w dsh-plugin-astock                      # 单个包
-node --test packages/tools/astock/test/*.test.js   # 单个文件
+node --test packages/astock/test/*.test.js   # 单个文件
 ```
 
 测试用 Node 内置 runner(`node:test`):零测试依赖、免构建,和插件本身的加载方式
@@ -119,8 +122,8 @@ node --test packages/tools/astock/test/*.test.js   # 单个文件
 
 ## 贡献
 
-1. 按扩展形态选分组,先读该分组的 README。
-2. 建 `packages/<分组>/<name>/`,含 `package.json`、`cordis.patch.yml`、
+1. 按扩展形态选分组,先读 `docs/` 里对应的指南。
+2. 建 `packages/<name>/`,含 `package.json`(含 `dsh.category`)、`cordis.patch.yml`、
    `lib/index.js`、`README.md`、`LICENSE`。
 3. 用**命名导出** `name` / `inject` / `apply`。default 导出会让 Loader 丢掉
    `inject`,而它失效后的表现完全不像是导出方式引起的,很难查。

@@ -13,17 +13,22 @@ import { join } from 'node:path'
  * them here means a new package cannot quietly skip one.
  */
 
-/** Every plugin package in the repo, discovered rather than listed. */
+/**
+ * Every plugin package, discovered rather than listed.
+ *
+ * The layout is one directory per plugin, flat — the ecosystem's scanners look
+ * for `packages/<name>/package.json` and nothing in the catalogue of 1,342
+ * plugins nests deeper. What a plugin extends is therefore metadata
+ * (`dsh.category`), not a parent directory.
+ */
 function packages() {
-  const found = []
-  for (const group of ['tools', 'runtime', 'ui']) {
-    for (const entry of readdirSync(join('packages', group), { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue
-      const dir = join('packages', group, entry.name)
-      found.push({ group, dir, pkg: JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) })
-    }
-  }
-  return found
+  return readdirSync('packages', { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => {
+      const dir = join('packages', entry.name)
+      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+      return { group: String(pkg.dsh?.category ?? '').split('/')[0], dir, pkg }
+    })
 }
 
 const all = packages()
@@ -46,6 +51,9 @@ for (const { group, dir, pkg } of all) {
     assert.ok(!module_.name.startsWith('dsh-plugin-'),
       'the exported name is the short one; the prefix belongs in package.json')
 
+    assert.equal(dir, join('packages', pkg.name.replace(/^dsh-plugin-/, '')),
+      'the directory is the plugin name, one level under packages/, where scanners look')
+
     const patch = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')
     assert.match(patch, new RegExp(`name: ${pkg.name}\\b`), 'the patch row references the package by name, not a path')
     assert.match(patch, new RegExp(`id: ${module_.name}\\b`), 'the patch row id matches the exported name')
@@ -58,8 +66,8 @@ for (const { group, dir, pkg } of all) {
     assert.ok(!pkg.files.some(f => /test/.test(f)), 'tests do not ship')
     assert.ok((pkg.keywords ?? []).includes('dsh-plugin'), 'plugin catalogues discover by this keyword')
     assert.equal(pkg.dsh?.bundle?.patch, './cordis.patch.yml')
-    assert.ok(typeof pkg.dsh?.category === 'string' && pkg.dsh.category.startsWith(group + '/'),
-      `dsh.category must start with its group (${group}/…)`)
+    assert.match(String(pkg.dsh?.category ?? ''), /^(tools|runtime|ui)\/[a-z-]+$/,
+      'dsh.category carries the grouping now that the directories do not')
     assert.equal(pkg.repository?.directory, dir, 'repository.directory points at this package')
     assert.ok(existsSync(join(dir, 'README.md')), 'a package README is its npm page')
 
