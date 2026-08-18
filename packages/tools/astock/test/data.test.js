@@ -50,3 +50,28 @@ test('PERIOD_NAMES covers the periods the tools document', () => {
     assert.equal(typeof PERIOD_NAMES[period], 'string')
   }
 })
+
+test('fetchKline enforces its own limit when the API ignores it', async (t) => {
+  // Observed live: with an open-ended range EastMoney answers with the whole
+  // history — 5,985 bars for a request of 30. The renderer only shows the
+  // tail, so the excess rode invisibly into the canonical value and, in Code
+  // Mode, across the worker boundary.
+  const { fetchKline } = await import('../lib/data.js')
+  const real = globalThis.fetch
+  t.after(() => { globalThis.fetch = real })
+
+  const history = Array.from({ length: 500 }, (_, i) =>
+    `2026-01-${String((i % 28) + 1).padStart(2, '0')},10,${10 + i},11,9,100,1000,1,1,1,1`)
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    data: { name: '测试', klines: history },
+  }))
+
+  const bounded = await fetchKline('600519', { period: 'daily', limit: 30 })
+  assert.equal(bounded.klines.length, 30, 'the caller asked for 30')
+  assert.equal(bounded.total, 30, 'total must describe what is returned')
+  // The tail is what a chart and a renderer both want: the most recent bars.
+  assert.equal(bounded.klines.at(-1).close, history.at(-1).split(',')[2] * 1)
+
+  const capped = await fetchKline('600519', { period: 'daily', limit: 99999 })
+  assert.equal(capped.klines.length, 500, 'a limit above the data returns what exists')
+})

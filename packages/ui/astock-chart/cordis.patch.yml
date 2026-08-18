@@ -1,0 +1,4 @@
+# dsh-plugin-astock-chart bundle layer: serves the candlestick card to the web client.
+- insert:
+    - id: astock-chart
+      name: dsh-plugin-astock-chart

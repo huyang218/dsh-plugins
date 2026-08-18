@@ -142,7 +142,15 @@ async function fetchKline(code, options = {}) {
   }
   
   const klineData = data.data;
-  const klines = (klineData.klines || []).map(line => parseKline(line));
+  // EastMoney ignores `lmt` when the range is open-ended (`beg=0`), answering
+  // with the stock's WHOLE history — 5,985 bars for a 2001 listing where the
+  // caller asked for 30. The renderer only shows the tail, so the excess was
+  // invisible while every call still carried it into the canonical value and,
+  // in Code Mode, across the worker boundary. Enforce the bound here: the
+  // caller's `limit` is a promise this module makes, not one the API keeps.
+  const bound = Math.max(1, Math.min(Math.floor(limit), 1000));
+  const parsed = (klineData.klines || []).map(line => parseKline(line));
+  const klines = parsed.slice(-bound);
   
   return {
     code: code,

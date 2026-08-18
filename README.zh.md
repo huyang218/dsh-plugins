@@ -24,6 +24,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | --- | --- | --- | --- |
 | [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A 股数据面:行情、K 线、指标、全市场筛选、财务报表、资金流向、可转债 | 免费,部分工具需 Tushare |
 | [**ainfo**](packages/tools/ainfo) | [`tools`](packages/tools) | A 股信息面:新闻、券商研报、业绩预告、分红、股东增减持、十大股东 | 需 Tushare token |
+| [**astock-chart**](packages/ui/astock-chart) | [`ui`](packages/ui) | 把 `astock_data` 的结果直接画成带成交量的 K 线图,就在回复里 | — |
 | [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | — |
 | [**tool-health**](packages/runtime/tool-health) | [`runtime`](packages/runtime) | 跨会话记住哪些工具在失败,并在下一次会话开始前就告诉模型 | — |
 | [**tool-usage**](packages/runtime/tool-usage) | [`runtime`](packages/runtime) | 计量一次会话在工具上的花费:调用次数、耗时分位数、失败率,并可设预算提醒 | — |
@@ -40,7 +41,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | --- | --- | :---: |
 | [**`tools/`**](packages/tools) | 模型可调用的能力 | 是 |
 | [**`runtime/`**](packages/runtime) | waterfall 包装与共享服务 | 否 |
-| [**`ui/`**](packages/ui) | Web 客户端扩展 *(暂空)* | — |
+| [**`ui/`**](packages/ui) | Web 客户端扩展 | 在浏览器里 |
 
 每个分组的 README 写清该形态特有的约定和坑。
 

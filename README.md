@@ -24,6 +24,7 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 | --- | --- | --- | --- |
 | [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A-share market data: quotes, K-lines, indicators, whole-market screening, financial statements, money flow, convertible bonds | free, plus Tushare-only tools |
 | [**ainfo**](packages/tools/ainfo) | [`tools`](packages/tools) | A-share information: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token |
+| [**astock-chart**](packages/ui/astock-chart) | [`ui`](packages/ui) | Renders `astock_data` results as a candlestick chart with volume, inside the reply | — |
 | [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
 | [**tool-health**](packages/runtime/tool-health) | [`runtime`](packages/runtime) | Remembers which tools have been failing, across sessions, and tells the next session before it starts work | — |
 | [**tool-usage**](packages/runtime/tool-usage) | [`runtime`](packages/runtime) | Measures what a session spends on tools — calls, duration percentiles, failures — with an optional budget warning | — |
@@ -41,7 +42,7 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 | --- | --- | :---: |
 | [**`tools/`**](packages/tools) | Capabilities the model can call | yes |
 | [**`runtime/`**](packages/runtime) | Waterfall wrappers and shared services | no |
-| [**`ui/`**](packages/ui) | Web client extensions *(empty for now)* | — |
+| [**`ui/`**](packages/ui) | Web client extensions | in the browser |
 
 Each group's README carries the conventions and pitfalls of that shape.
 

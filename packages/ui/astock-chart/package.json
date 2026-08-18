@@ -1,0 +1,51 @@
+{
+  "name": "dsh-plugin-astock-chart",
+  "version": "0.1.0",
+  "description": "Draws the candlesticks in the reply: a web-client card that renders astock_data results as an OHLC chart with volume, instead of a table of numbers.",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "a-share",
+    "chart",
+    "candlestick",
+    "web-ui"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huyang218/dsh-plugins.git",
+    "directory": "packages/ui/astock-chart"
+  },
+  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/ui/astock-chart#readme",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test 'test/*.test.js'"
+  },
+  "files": [
+    "lib",
+    "client",
+    "cordis.patch.yml",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    },
+    "category": "ui/finance"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  }
+}

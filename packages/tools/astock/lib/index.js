@@ -94,6 +94,36 @@ const INDICATOR_OPTIONS = {
 };
 
 /**
+ * Bars a chart card may carry, newest-last.
+ *
+ * The canonical value is execution-local — it never reaches a card, and never
+ * survives replay — so anything a chart needs has to travel through
+ * `presentationMeta`, which IS persisted on the result. That makes the bound
+ * matter: this rides along in the session log on every call, so it holds a
+ * screen's worth of candles rather than the whole history a caller may have
+ * asked for.
+ */
+const CHART_BARS = 120;
+
+/**
+ * Pack the trailing bars into one compact string for the chart card.
+ *
+ * A string rather than objects: the same shape repeated 120 times costs far
+ * more as JSON keys than as `;`-separated rows, and this is persisted.
+ * Missing metrics become empty tokens — `Number('')` is 0, so a reader must
+ * test for the empty string rather than coerce blindly.
+ * @param {Array<Object>} klines - Bars, oldest first
+ * @returns {string} `date,open,high,low,close,volume` rows joined by `;`
+ */
+function packSeries(klines) {
+  const token = value => (Number.isFinite(value) ? String(value) : '');
+  return (klines ?? []).slice(-CHART_BARS).map(bar => [
+    String(bar.date ?? '').replace(/-/g, ''),
+    token(bar.open), token(bar.high), token(bar.low), token(bar.close), token(bar.volume),
+  ].join(',')).join(';');
+}
+
+/**
  * Format K-line data for output
  */
 function formatKlineOutput(data) {
@@ -316,6 +346,7 @@ function apply(ctx, config) {
         periodName: value.periodName,
         total: value.total,
         latestKline: value.klines.length > 0 ? value.klines[value.klines.length - 1] : null,
+        series: packSeries(value.klines),
       }),
     },
     timeoutMs: 30000,
