@@ -141,6 +141,9 @@ cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
 
 ## 验证清单(改完插件后)
 
+> **不要把插件装进用户的 `web` profile 做验证**(用户明确要求):本机 profile 只保留用户真正在用的那几个。要端到端验证就开一次性 profile(`--profile tmp-<名字>`),验证完 `plugin remove` 并删掉 profile;`pnpm` 移除后会**留下悬挂的符号链接**,一并删掉。`--dump-config` 和纯加载冒烟不需要装进任何 profile。
+
+
 1. 单元测试:`npm test -w <package-name>`(改公共约定跑根 `npm test`,它同时跑仓库级合规检查)——抓逻辑回归与 schema 违规;
 2. 纯加载冒烟(上面的 `node -e import` 一行)——抓语法/依赖错误;
 3. `--dump-config` 确认插件行在组合树里;
