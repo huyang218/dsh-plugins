@@ -36,4 +36,17 @@ function assignFinite(target, source) {
   return target;
 }
 
-export { finiteNumber, assignFinite };
+/**
+ * Today's date in the exchange's timezone, YYYYMMDD.
+ *
+ * The host may sit anywhere; a UTC "today" is the previous trading day for
+ * most of the Chinese session, which silently shifts every window by one day.
+ * @returns {string} Date in Asia/Shanghai as YYYYMMDD
+ */
+function shanghaiToday() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date()).replace(/-/g, '');
+}
+
+export { finiteNumber, assignFinite, shanghaiToday };

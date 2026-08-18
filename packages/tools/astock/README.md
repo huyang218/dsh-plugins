@@ -13,26 +13,47 @@ history.
 dsh plugin --profile web add dsh-plugin-astock
 ```
 
-Configure the Tushare token through your shell's plugin settings, or in the
-profile's `cordis.patch.yml`:
+That alone gives you every free tool. The Tushare-backed tools appear once the
+shared provider is installed and holds a token:
+
+```sh
+dsh plugin --profile web add dsh-plugin-tushare
+```
 
 ```yaml
-- id: astock
+- id: tushare
   config:
-    tushareToken: 'your-token'   # optional; empty keeps the plugin EastMoney-only
+    token: 'your-tushare-token'
 ```
+
+The token lives on the provider, not here, so every finance plugin shares one
+token and one quota. See [dsh-plugin-tushare](../../runtime/tushare) for what
+Tushare charges for and what a permission failure tells the agent.
 
 ## Tools
 
-| Tool | Needs token | What it does |
-| --- | --- | --- |
-| `astock_quote` | no | Realtime quote for one stock |
-| `astock_data` | no | K-lines (daily/weekly/monthly/intraday), optionally adjusted |
-| `astock_indicators` | no | K-lines + MA/MACD/RSI/KDJ/BOLL/OBV/WR/ATR/DMI in one call |
-| `astock_search` | no | Find stocks by code, name or pinyin |
-| `astock_market_quotes` | no | Realtime snapshot of **every** listed stock |
-| `astock_market_bars` | yes | Daily bars for **every** stock over a trailing window |
-| `astock_fundamentals` | yes | Daily valuation metrics (PE/PE-TTM/PB/PS/dividend yield) |
+Free tools work with no credentials at all. The rest need a Tushare Pro token,
+and each says so in its own description — so the model can pick a free tool
+when one will do, and tell you exactly what is missing when one will not.
+
+| Tool | Cost | What it does | Free fallback |
+| --- | --- | --- | --- |
+| `astock_quote` | free | Realtime quote for one stock | — |
+| `astock_data` | free | K-lines: daily/weekly/monthly/intraday, adjustable | — |
+| `astock_indicators` | free | K-lines + MA/MACD/RSI/KDJ/BOLL/OBV/WR/ATR/DMI in one call | — |
+| `astock_search` | free | Find stocks by code, name or pinyin | — |
+| `astock_market_quotes` | free | Realtime snapshot of **every** listed stock | — |
+| `astock_fundamentals` | Tushare | Daily valuation: PE, PE-TTM, PB, PS, dividend yield, caps | `astock_quote` has PE and caps only |
+| `astock_market_bars` | Tushare | Daily bars for **every** stock over a trailing window | `astock_data`, one stock at a time |
+| `astock_financials` | Tushare | Income statement, balance sheet, cash flow, key ratios by period | none |
+| `astock_moneyflow` | Tushare | Per-stock flow by order size, Stock Connect flows, 龙虎榜 | none |
+| `astock_convertible_bonds` | Tushare | Every convertible bond with conversion value and premium | none |
+
+Tushare gates interfaces by account points, so a valid token still may not
+reach all of them. A refusal comes back as a permission error that names the
+requirement — the plugin passes it through rather than treating the data as
+merely missing, and the model is told to report it instead of substituting
+another source.
 
 ## Screening needs Code Mode
 

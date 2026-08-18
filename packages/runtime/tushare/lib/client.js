@@ -199,3 +199,36 @@ export {
   KIND, TushareError, createQuery, createRateLimiter, rowsToObjects, sleep,
   accessDeniedMessage, RATE_LIMIT_PATTERN, ACCESS_PATTERN, BAD_TOKEN_PATTERN,
 };
+
+/**
+ * Coerce a provider field to a lossless finite number, or undefined.
+ *
+ * Tushare reports a missing metric as `null`, and `Number(null)` is `0` — so
+ * coercing blindly turns "this company has no P/E" into "its P/E is zero".
+ * Under a closed output schema a `NaN` is worse still: it fails the whole call.
+ * Shared here because every consumer of this service needs the same rule.
+ * @param {*} raw - Raw provider value
+ * @returns {number|undefined} A finite number, or undefined when absent
+ */
+function finiteNumber(raw) {
+  if (raw === null || raw === undefined || raw === '' || raw === '-') return undefined;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return undefined;
+  return Object.is(value, -0) ? 0 : value;
+}
+
+/**
+ * Copy the finite numbers of `source` onto `target`, skipping absent ones.
+ * @param {Object} target - Object to extend
+ * @param {Object} source - Candidate numeric fields, keyed by canonical name
+ * @returns {Object} The same target
+ */
+function assignFinite(target, source) {
+  for (const [key, raw] of Object.entries(source)) {
+    const value = finiteNumber(raw);
+    if (value !== undefined) target[key] = value;
+  }
+  return target;
+}
+
+export { finiteNumber, assignFinite };

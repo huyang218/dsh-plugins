@@ -17,10 +17,12 @@ import Schema from '@deepseek-ai/schemastery';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { fetchKline, fetchQuote, searchStocks, PERIOD_NAMES, normalizeCode } from './data.js';
 import { calculateAllIndicators } from './indicators.js';
-import {
-  toTsCode, tushareQuery, createRateLimiter, fetchTradeDates, fetchDailyByDate, mapWithConcurrency,
-} from './tushare.js';
+import { toTsCode, fetchDailyByDate, mapWithConcurrency } from './tushare.js';
 import { fetchMarketQuotes } from './market.js';
+import { shanghaiToday } from './value.js';
+import {
+  registerFinancialsTool, registerMoneyflowTool, registerConvertibleBondsTool, tokenNote,
+} from './finance-tools.js';
 
 /** Cordis plugin name used by loader diagnostics. */
 const name = 'astock';
@@ -33,12 +35,6 @@ const inject = ['tools', 'systemPrompt'];
  * EastMoney-only; providing one additionally registers astock_fundamentals.
  */
 const Config = Schema.object({
-  tushareToken: Schema.string().default('').description(
-    'Tushare Pro API token (https://tushare.pro). Empty disables the astock_fundamentals tool.',
-  ),
-  tushareEndpoint: Schema.string().default('https://api.tushare.pro').description(
-    'Tushare Pro API endpoint.',
-  ),
   marketPageSize: Schema.number().default(100).description(
     'Rows per page when sweeping the whole-market snapshot.',
   ),
@@ -55,11 +51,6 @@ const Config = Schema.object({
   ),
   marketConcurrency: Schema.number().default(4).description(
     'Parallel per-day requests when fetching whole-market history.',
-  ),
-  tushareMaxPerMinute: Schema.number().default(450).description(
-    'Requests per minute per Tushare interface. Tushare meters per interface '
-    + '(daily allows 500/min) and one whole-market window costs one request per '
-    + 'trading day, so wide calls exhaust the quota without a gate. 0 disables it.',
   ),
   marketDayCacheSize: Schema.number().default(130).description(
     'Closed trading days kept in memory by astock_market_bars: ~0.55 MB a day '
@@ -215,6 +206,31 @@ function formatIndicatorOutput(klines, indicators, options) {
  * Register the tools
  */
 function apply(ctx, config) {
+  // Credential map, registered unconditionally.
+  //
+  // The Tushare-backed tools below only exist when the provider plugin is
+  // installed, so without this the model would see them simply missing and
+  // have no way to explain why. Stating the split up front lets it route to a
+  // free tool when one will do, and tell the user exactly what to install or
+  // configure when one will not.
+  ctx.systemPrompt.section({
+    name: 'astock:data-sources',
+    order: 139,
+    text: [
+      'astock data sources and credentials:',
+      '- FREE, no credentials (EastMoney): astock_quote, astock_data, astock_indicators,',
+      '  astock_search, astock_market_quotes. These always work.',
+      '- REQUIRES a Tushare Pro token (the dsh-plugin-tushare plugin, configured with a token):',
+      '  astock_fundamentals, astock_market_bars, astock_financials, astock_moneyflow,',
+      '  astock_convertible_bonds. Tushare gates interfaces by account points, so a valid',
+      '  token still may not reach every one of them.',
+      'If one of those tools is absent from your tool list, the provider plugin is not',
+      'installed: say so and point the user at dsh-plugin-tushare. If a call fails with a',
+      'permission or token error, report exactly that to the user. In both cases the data is',
+      'unavailable — do NOT substitute another source, estimate it, or carry on as if you had it.',
+    ].join('\n'),
+  });
+
   // ── Tool: astock_data ──
   ctx.systemPrompt.section({
     name: 'tool:astock_data',
@@ -651,15 +667,20 @@ function apply(ctx, config) {
   // ── Tool: astock_market_quotes (whole-market sweep; no token needed) ──
   registerMarketQuotesTool(ctx, config ?? {});
 
-  // ── Tushare-backed tools (only when a token is configured) ──
-  if (config?.tushareToken) {
-    // One quota gate for every Tushare-backed tool in this plugin instance:
-    // the limit is per interface per token, so it has to be shared to mean
-    // anything.
-    const limiter = createRateLimiter({ perMinute: config.tushareMaxPerMinute ?? 450 });
-    registerFundamentalsTool(ctx, config, limiter);
-    registerMarketBarsTool(ctx, config, limiter);
-  }
+  // ── Tushare-backed tools ──
+  // Nested injection rather than a top-level `inject`: the tools above need no
+  // credentials at all, and declaring the service required would withhold them
+  // from anyone who never installs the provider. This body runs if and when
+  // `dsh-plugin-tushare` is present, and the token, quota gate and calendar
+  // are its concern — shared with every other finance plugin.
+  ctx.inject(['tushare'], (tushareCtx) => {
+    const tushare = tushareCtx.tushare;
+    registerFundamentalsTool(tushareCtx, config ?? {}, tushare);
+    registerMarketBarsTool(tushareCtx, config ?? {}, tushare);
+    registerFinancialsTool(tushareCtx, tushare);
+    registerMoneyflowTool(tushareCtx, tushare);
+    registerConvertibleBondsTool(tushareCtx, tushare);
+  });
 }
 
 /**
@@ -775,9 +796,9 @@ function formatMarketQuotesOutput(value) {
  * gets rate-limited long before a market-wide window finishes.
  * @param {Object} ctx - Plugin context
  * @param {Object} config - Validated plugin config with a non-empty tushareToken
- * @param {Function} [limiter] - Shared Tushare quota gate
+ * @param {Object} tushare - The shared `tushare` service
  */
-function registerMarketBarsTool(ctx, config, limiter) {
+function registerMarketBarsTool(ctx, config, tushare) {
   // A closed trading day's bars are immutable, so the packed rows for one can
   // be reused forever. Screening is iterative — the model refetches the same
   // window as it refines a filter — and each refetch is otherwise a full
@@ -791,7 +812,8 @@ function registerMarketBarsTool(ctx, config, limiter) {
 
   ctx.tools.register(defineTool({
     name: 'astock_market_bars',
-    description: 'Fetch daily OHLC bars for EVERY listed A-share stock over a trailing window of trading days (unadjusted). Use for market-wide historical screening; one call covers the whole market.',
+    description: 'Fetch daily OHLC bars for EVERY listed A-share stock over a trailing window of trading days (unadjusted). Use for market-wide historical screening; one call covers the whole market. '
+      + tokenNote('astock_data 免费提供单只股票的历史 K 线;全市场扫描没有免费路径,逐只抓取会被数据源限流'),
     parameters: {
       endDate: {
         type: 'string',
@@ -852,13 +874,8 @@ function registerMarketBarsTool(ctx, config, limiter) {
     async execute(args, exec) {
       const maxDays = config.marketMaxDays ?? 120;
       const days = Math.max(1, Math.min(Math.floor(args.days ?? 40), maxDays));
-      const shared = {
-        endpoint: config.tushareEndpoint,
-        token: config.tushareToken,
-        signal: exec.signal,
-        limiter,
-      };
-      const tradeDates = await fetchTradeDates({ ...shared, endDate: args.endDate, count: days });
+      const shared = { signal: exec.signal, query: tushare.query };
+      const tradeDates = await tushare.tradeDates({ endDate: args.endDate, count: days, signal: exec.signal });
       if (tradeDates.length === 0) {
         throw new Error(`No trading days found on or before ${args.endDate}`);
       }
@@ -961,14 +978,6 @@ function packMarketBar(bar) {
     row += `${row === '' ? '' : ','}${bar[field] === undefined ? '' : bar[field]}`;
   }
   return row;
-}
-
-/** Today in the exchange's timezone, YYYYMMDD — the line between a closed
- * (immutable, cacheable) trading day and one still being written. */
-function shanghaiToday() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date()).replace(/-/g, '');
 }
 
 /**
@@ -1074,9 +1083,9 @@ function formatFundamentalsOutput(value) {
  * Register the Tushare-backed fundamentals tool.
  * @param {Object} ctx - Plugin context
  * @param {Object} config - Validated plugin config with a non-empty tushareToken
- * @param {Function} [limiter] - Shared Tushare quota gate
+ * @param {Object} tushare - The shared `tushare` service
  */
-function registerFundamentalsTool(ctx, config, limiter) {
+function registerFundamentalsTool(ctx, config, tushare) {
   ctx.systemPrompt.section({
     name: 'tool:astock_fundamentals',
     order: 144,
@@ -1085,7 +1094,8 @@ function registerFundamentalsTool(ctx, config, limiter) {
 
   ctx.tools.register(defineTool({
     name: 'astock_fundamentals',
-    description: 'Fetch daily fundamental metrics (PE, PE-TTM, PB, PS, dividend yield, market cap) for an A-share stock from Tushare Pro.',
+    description: 'Fetch daily fundamental metrics (PE, PE-TTM, PB, PS, dividend yield, market cap) for an A-share stock from Tushare Pro. '
+      + tokenNote('astock_quote 免费提供单只股票的市盈率与总/流通市值,但没有 TTM、市净率、股息率'),
     parameters: {
       code: {
         type: 'string',
@@ -1133,14 +1143,11 @@ function registerFundamentalsTool(ctx, config, limiter) {
       const tsCode = toTsCode(args.code);
       const params = { ts_code: tsCode, limit: 1 };
       if (args.tradeDate) params.trade_date = args.tradeDate;
-      const rows = await tushareQuery({
-        endpoint: config.tushareEndpoint,
-        token: config.tushareToken,
+      const rows = await tushare.query({
         apiName: 'daily_basic',
         params,
         fields: Object.keys(FUNDAMENTAL_FIELDS).join(','),
         signal: exec.signal,
-        limiter,
       });
       if (rows.length === 0) {
         throw new Error(`No daily_basic data for ${tsCode}${args.tradeDate ? ` on ${args.tradeDate}` : ''}`);

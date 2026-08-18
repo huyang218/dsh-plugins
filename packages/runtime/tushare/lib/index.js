@@ -12,7 +12,7 @@
  */
 
 import Schema from '@deepseek-ai/schemastery';
-import { createQuery, createRateLimiter, TushareError, KIND } from './client.js';
+import { createQuery, createRateLimiter, TushareError, KIND, finiteNumber, assignFinite } from './client.js';
 
 /** Cordis plugin name used by loader diagnostics. */
 const name = 'tushare';
@@ -117,4 +117,4 @@ async function fetchTradeDates(query, { endDate, count, signal }) {
   return rows.map(row => String(row.cal_date)).sort().slice(-count);
 }
 
-export { apply, name, Config, INTERFACE_ACCESS, TushareError, KIND };
+export { apply, name, Config, INTERFACE_ACCESS, TushareError, KIND, finiteNumber, assignFinite };
