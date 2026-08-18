@@ -32,6 +32,9 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | [**tool-retry**](packages/tool-retry) | [`runtime`](docs/authoring-runtime.md) | 对可自行恢复的工具失败做重试(socket 重置、限流、超时),只针对声明为可安全重复的工具 | — |
 | [**gateway-compat**](packages/gateway-compat) | [`runtime`](docs/authoring-runtime.md) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 | — |
 
+**想找本仓库没有的插件?** [CATALOG.zh.md](CATALOG.zh.md) 按分类列出了由他人维护的
+插件,以及每个插件做什么。
+
 > [!NOTE]
 > 金融插件通过 `tushare` provider 共用一份凭证,而不是各自向用户要同一个 token。
 > 每个需要凭证的工具都**在自己的描述里写明**——这样模型能在有免费替代时选免费的,

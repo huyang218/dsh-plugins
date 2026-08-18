@@ -32,6 +32,9 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 | [**tool-retry**](packages/tool-retry) | [`runtime`](docs/authoring-runtime.md) | Retries transient tool failures — socket resets, rate limits, timeouts — for the tools an operator declares safe to repeat | — |
 | [**gateway-compat**](packages/gateway-compat) | [`runtime`](docs/authoring-runtime.md) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel | — |
 
+**Looking for something this repo does not ship?** [CATALOG.md](CATALOG.md)
+lists plugins maintained elsewhere, by category, with what each one does.
+
 > [!NOTE]
 > Finance plugins share one credential through the `tushare` provider rather
 > than each asking for the same token. Every tool that needs it says so **in its
