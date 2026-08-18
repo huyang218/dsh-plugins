@@ -1,0 +1,55 @@
+{
+  "name": "dsh-plugin-shortcuts",
+  "version": "0.1.0",
+  "description": "Fully customizable keyboard shortcuts for the dsh web client: 34 pre-registered features across session, view, clipboard, model, permission and system groups, recordable bindings, and permission cycling that leaves no trace in the transcript.",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": { "default": "./lib/index.js" },
+    "./client": { "default": "./lib/client.js" },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "keyboard-shortcuts",
+    "hotkeys",
+    "web-ui",
+    "productivity"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huyang218/dsh-plugins.git",
+    "directory": "packages/shortcuts"
+  },
+  "dsh": {
+    "category": "ui/productivity",
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-theme"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "react": "^18.2.0"
+  }
+}

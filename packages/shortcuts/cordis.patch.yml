@@ -1,0 +1,6 @@
+# Bundle config layer: insert the plugin row. The browser half is picked up by
+# dsh-client-modules through the package's `dsh.client` declaration, the same
+# way the shipped ui-* packages are.
+- insert:
+    - id: shortcuts
+      name: dsh-plugin-shortcuts

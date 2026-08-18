@@ -26,6 +26,7 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 | [**ainfo**](packages/ainfo) | [`tools`](docs/authoring-tools.md) | A-share information: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token |
 | [**aportfolio**](packages/aportfolio) | [`tools`](docs/authoring-tools.md) | Remembers your holdings and watchlist across sessions, prices them live, and reports profit, weights and target hits | — |
 | [**astock-chart**](packages/astock-chart) | [`ui`](docs/authoring-ui.md) | Renders `astock_data` results as a candlestick chart with volume, inside the reply | — |
+| [**shortcuts**](packages/shortcuts) | [`ui`](docs/authoring-ui.md) | Keyboard shortcuts for the web client — 34 features across session, view, clipboard, model and permission, with recordable bindings | — |
 | [**tushare**](packages/tushare) | [`runtime`](docs/authoring-runtime.md) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
 | [**tool-health**](packages/tool-health) | [`runtime`](docs/authoring-runtime.md) | Remembers which tools have been failing, across sessions, and tells the next session before it starts work | — |
 | [**tool-usage**](packages/tool-usage) | [`runtime`](docs/authoring-runtime.md) | Measures what a session spends on tools — calls, duration percentiles, failures — with an optional budget warning | — |

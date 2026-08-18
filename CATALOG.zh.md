@@ -17,7 +17,6 @@
 | [dsh-auto-collapse](https://github.com/a179-sanae/dsh-auto-collapse) | 24 | Codex 风格工作流自动折叠：回合完成收成一行「已处理 X秒」只留最终正文，工具/思考块折叠成实时摘要 chip（运行中跟随流式滚动），逐级点击展开；卸载完整还原。 | MIT |
 | [dsh-annotation](https://github.com/omdsh-dev/dsh-annotation) | 72 | 选中文字→批注→随消息发送，回复按批注逐条对照。 | — |
 | [dsh-navbar](https://github.com/vlln/dsh-navbar) | 38 | 对话节点导航条，右缘节点串快速跳转 user 消息。 | — |
-| [dsh-shortcuts](https://github.com/Ricketts-Guo/dsh-shortcuts) | 2 | Web UI 可自定义键盘快捷键：34 个预置功能（会话、视图、剪贴板、模型、静默权限切换、设置），一键录制自定义组合键，内置快捷键速查表与诊断面板。 | MIT |
 | [ui-status-label](https://github.com/alingalingling/ui-status-label) | 38 | 把鲸鱼娘思考时的 "deep diving" 状态文案自定义成任意你想要的样子。 | MIT |
 
 ### 可观测与会话

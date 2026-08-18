@@ -20,7 +20,6 @@ Star counts are a snapshot from 2026-08-18.
 | [dsh-auto-collapse](https://github.com/a179-sanae/dsh-auto-collapse) | 24 | Codex-style workflow auto-collapse: finished turns fold into a single "processed in Xs" row leaving only the final answer; tool calls and think blocks | MIT |
 | [dsh-annotation](https://github.com/omdsh-dev/dsh-annotation) | 72 | Select text → annotate → send with your message; replies map back to each annotation. | — |
 | [dsh-navbar](https://github.com/vlln/dsh-navbar) | 38 | Conversation node navigation bar for quick jumps between user messages. | — |
-| [dsh-shortcuts](https://github.com/Ricketts-Guo/dsh-shortcuts) | 2 | Fully customizable keyboard shortcuts for the Web UI: 34 pre-registered features (sessions, views, clipboard, models, silent permission cycling, setti | MIT |
 | [ui-status-label](https://github.com/alingalingling/ui-status-label) | 38 | Customize the "deep diving" thinking status label to anything you like. | MIT |
 
 ### Observability & sessions
