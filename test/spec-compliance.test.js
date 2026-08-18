@@ -109,9 +109,10 @@ test('tool plugins keep their canonical values honest', async () => {
   for (const { dir, pkg } of all.filter(p => p.group === 'tools')) {
     const module_ = await import(new URL(`../${join(dir, pkg.main)}`, import.meta.url).href)
     const registered = []
+    const sections = []
     const ctx = {
       tools: { register: t => registered.push(t) },
-      systemPrompt: { section() {}, context() {} },
+      systemPrompt: { section: s => sections.push(s), context() {} },
       // A tools/ plugin may also provide a service and reach for another —
       // the vision tool provides its bridge and resolves the sandboxed fs —
       // and a harness missing those fails the plugin for the harness's own gap.
@@ -123,6 +124,14 @@ test('tool plugins keep their canonical values honest', async () => {
       assert.ok(tool.output?.schema, `${tool.name} declares an output schema`)
       assert.equal(typeof tool.output.render, 'function', `${tool.name} renders model-facing text`)
       assert.ok(tool.timeoutMs > 0, `${tool.name} declares a timeout`)
+    }
+    // A plugin whose tools need configuration registers none under defaults.
+    // That is allowed, but it must still say so in the prompt: a capability
+    // the model cannot see and was never told about is one it will either
+    // hallucinate its way around or replace with a worse tool.
+    if (registered.length === 0) {
+      assert.ok(sections.length > 0,
+        `${pkg.name} registers no tool with default config and no section explaining why`)
     }
   }
 })

@@ -26,7 +26,7 @@ function mount({ reply, ...overrides }) {
       readBytes: async () => PNG,
     },
   }
-  const config = new plugin.Config(overrides)
+  const config = new plugin.Config({ baseURL: 'http://127.0.0.1:1234/v1', model: 'some-vlm', ...overrides })
   plugin.apply(ctx, config)
 
   const sent = []
@@ -134,7 +134,7 @@ test('a missing file is reported before anything is sent', async () => {
     logger: { warn: () => {} },
     fs: { resolve: async path => ({ displayPath: path }), stat: async () => undefined },
   }
-  plugin.apply(ctx, new plugin.Config())
+  plugin.apply(ctx, new plugin.Config({ baseURL: 'http://127.0.0.1:1234/v1', model: 'some-vlm' }))
 
   let called = false
   globalThis.fetch = async () => { called = true }

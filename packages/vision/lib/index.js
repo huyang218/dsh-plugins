@@ -26,12 +26,42 @@ export const name = 'vision'
 /** The services this plugin needs: the tool registry and the sandboxed fs. */
 export const inject = ['tools', 'fs', 'systemPrompt']
 
-/** Plugin configuration; every field has a local-first default. */
+/**
+ * Plugin configuration. Picking a provider fills in its endpoint, wire format
+ * and a starting model id, so the only thing that must be supplied is a key —
+ * and nothing is assumed about which multimodal model may see your images:
+ * with no key the plugin registers nothing and says so in the prompt.
+ */
 export const Config = z.object({
-  /** OpenAI-compatible endpoint root, without a trailing path. LM Studio by default. */
-  baseURL: z.string().default('http://127.0.0.1:1234/v1'),
-  /** The vision-language model id the endpoint serves. */
-  model: z.string().default('qwen3.5-9b-vlm'),
+  /** Which service looks at the images; decides the endpoint and wire format. */
+  provider: z.union(['qwen', 'kimi', 'openai', 'claude', 'gemini', 'custom'])
+    .default('qwen').description(
+      '由哪个服务来看图。选定后端点、线格式与起步模型 id 都有预设,**只需再填 apiKey**:'
+      + '`qwen`(DashScope 兼容模式)、`kimi`(Moonshot)、`openai`、`claude`(Anthropic)、'
+      + '`gemini`(Google);`custom` 表示自建或本地端点,此时 baseURL / model / protocol 都要自己填。',
+    ),
+  /** The credential for the chosen provider. */
+  apiKey: z.string().default('').description(
+    '所选服务的 API key。**留空则插件不生效**——不注册 `vision` 工具,并在系统提示词里'
+    + '告知模型它看不了图。本机端点(localhost / 127.0.0.1)不需要 key。',
+  ),
+  /** Endpoint root override; empty means the provider's own. */
+  baseURL: z.string().default('').description(
+    '端点根地址,不含末尾路径。**留空 = 用所选 provider 的地址**;'
+    + '`provider: custom` 时必填(本机 LM Studio 是 `http://127.0.0.1:1234/v1`)。',
+  ),
+  /** Model id override; empty means the provider's starting model. */
+  model: z.string().default('').description(
+    '视觉模型 id。**留空 = 用所选 provider 的起步模型**(qwen-vl-max-latest / '
+    + 'moonshot-v1-8k-vision-preview / gpt-4o / claude-sonnet-5 / gemini-2.5-flash)。'
+    + '预设只是起点,按你的账号权限改成它真正能用的那个。',
+  ),
+  /** Wire format for `provider: custom`; the named providers set their own. */
+  protocol: z.union(['openai', 'anthropic', 'gemini']).default('openai').description(
+    '线格式,**仅在 `provider: custom` 时生效**:`openai` 是 `/chat/completions` + '
+    + 'data URI 图片,`anthropic` 是 `/messages` + base64 source 块,`gemini` 是 '
+    + '`:generateContent` + inline_data。命名 provider 各自带了正确的值。',
+  ),
   /** Output token cap for the VLM answer; reasoning models consume part of it. */
   maxTokens: z.number().step(1).min(1).default(8192),
   /**
@@ -70,6 +100,171 @@ const IMAGE_EXTENSIONS = {
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
   '.gif': 'image/gif',
+}
+
+/**
+ * What each provider needs, so the only thing a user must supply is a key.
+ * `protocol` is the wire format, which is what actually differs: OpenAI's
+ * `/chat/completions` with a data-URI image, Anthropic's `/messages` with a
+ * base64 source block, and Gemini's `:generateContent` with inline_data.
+ * Qwen and Kimi both serve the OpenAI format, which is why they cost nothing
+ * extra to support.
+ *
+ * The model ids are a starting point, not a promise about your account —
+ * override `model` with whatever your key is entitled to.
+ */
+const PROVIDERS = {
+  qwen: {
+    label: 'Qwen (DashScope)',
+    protocol: 'openai',
+    baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen-vl-max-latest',
+  },
+  kimi: {
+    label: 'Kimi (Moonshot)',
+    protocol: 'openai',
+    baseURL: 'https://api.moonshot.cn/v1',
+    model: 'moonshot-v1-8k-vision-preview',
+  },
+  openai: {
+    label: 'OpenAI',
+    protocol: 'openai',
+    baseURL: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+  },
+  claude: {
+    label: 'Claude (Anthropic)',
+    protocol: 'anthropic',
+    baseURL: 'https://api.anthropic.com/v1',
+    model: 'claude-sonnet-5',
+  },
+  gemini: {
+    label: 'Gemini (Google)',
+    protocol: 'gemini',
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+    model: 'gemini-2.5-flash',
+  },
+  custom: {
+    label: 'custom endpoint',
+    protocol: undefined, // taken from the `protocol` field
+    baseURL: '',
+    model: '',
+  },
+}
+
+/**
+ * One entry per wire format: where to POST, what headers carry the key, how
+ * the image is encoded, and where the answer lives in the reply. Everything
+ * else in this plugin is protocol-agnostic.
+ */
+const PROTOCOLS = {
+  openai: {
+    url: ({ baseURL }) => baseURL + '/chat/completions',
+    headers: ({ apiKey }) => (apiKey ? { Authorization: 'Bearer ' + apiKey } : {}),
+    body: ({ model, maxTokens }, base64, mediaType, prompt) => ({
+      model,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: 'data:' + mediaType + ';base64,' + base64 } },
+        ],
+      }],
+      max_tokens: maxTokens,
+      stream: false,
+    }),
+    answer: json => {
+      const message = json?.choices?.[0]?.message
+      // Reasoning VLMs emit the final answer in `content`, but only after
+      // spending tokens on `reasoning_content`. With a tight budget they stop
+      // mid-thought and leave `content` empty — prefer any non-empty field.
+      const content = (message?.content ?? '').trim()
+      return content.length > 0 ? content : (message?.reasoning_content ?? '').trim()
+    },
+  },
+  anthropic: {
+    url: ({ baseURL }) => baseURL + '/messages',
+    headers: ({ apiKey }) => ({
+      ...(apiKey ? { 'x-api-key': apiKey } : {}),
+      'anthropic-version': '2023-06-01',
+    }),
+    body: ({ model, maxTokens }, base64, mediaType, prompt) => ({
+      model,
+      max_tokens: maxTokens, // required by this API, not merely a cap
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+        ],
+      }],
+    }),
+    // The reply is a block list; a model that thinks first puts several blocks
+    // there, and only the text ones are the answer.
+    answer: json => (Array.isArray(json?.content) ? json.content : [])
+      .filter(block => block?.type === 'text' && typeof block.text === 'string')
+      .map(block => block.text)
+      .join('\n')
+      .trim(),
+  },
+  gemini: {
+    // The model id is part of the path here, not the body.
+    url: ({ baseURL, model }) => baseURL + '/models/' + encodeURIComponent(model) + ':generateContent',
+    headers: ({ apiKey }) => (apiKey ? { 'x-goog-api-key': apiKey } : {}),
+    body: ({ maxTokens }, base64, mediaType, prompt) => ({
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: mediaType, data: base64 } },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: maxTokens },
+    }),
+    answer: json => (json?.candidates?.[0]?.content?.parts ?? [])
+      .filter(part => typeof part?.text === 'string')
+      .map(part => part.text)
+      .join('\n')
+      .trim(),
+  },
+}
+
+/**
+ * Whether an endpoint is on this machine, and so needs no key. A local
+ * runtime like LM Studio serves without one; demanding a key there would make
+ * the plugin refuse a working setup.
+ * @param {string} baseURL - the resolved endpoint.
+ * @returns {boolean} true when nothing has to be sent over the network.
+ */
+export function isLocalEndpoint(baseURL) {
+  try {
+    const { hostname } = new URL(baseURL)
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Resolve provider preset, explicit overrides and the key into one route,
+ * plus what is still missing.
+ * @param {Object} config - the validated configuration.
+ * @returns {Object} the route and, when unusable, what it lacks
+ */
+export function resolveRoute(config) {
+  const preset = PROVIDERS[config.provider] ?? PROVIDERS.custom
+  const baseURL = (config.baseURL || preset.baseURL).trim().replace(/\/+$/, '')
+  const model = (config.model || preset.model).trim()
+  const protocol = preset.protocol ?? config.protocol
+  const apiKey = config.apiKey.trim()
+  const needsKey = baseURL.length > 0 && !isLocalEndpoint(baseURL)
+
+  const missing = []
+  if (baseURL.length === 0) missing.push('baseURL')
+  if (model.length === 0) missing.push('model')
+  if (needsKey && apiKey.length === 0) missing.push('apiKey')
+
+  return { provider: config.provider, label: preset.label, protocol, baseURL, model, apiKey, missing }
 }
 
 /**
@@ -382,12 +577,11 @@ export function normalizeEvidence(parsed, fallbackText) {
  * @param {AbortSignal | undefined} signal - caller cancellation.
  * @param {number} timeoutMs - per-request wall-time cap.
  */
-function buildRequest(baseURL, body, signal, timeoutMs) {
-  const url = baseURL.replace(/\/+$/, '') + '/chat/completions'
+function buildRequest(route, wire, body, signal, timeoutMs) {
   const timeout = AbortSignal.timeout(timeoutMs)
-  return fetch(url, {
+  return fetch(wire.url(route), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...wire.headers(route) },
     body: JSON.stringify(body),
     signal: signal !== undefined ? AbortSignal.any([signal, timeout]) : timeout,
   })
@@ -417,59 +611,70 @@ function buildPrompt(question, structured) {
  * @returns {Promise<string | object>} answer text, or evidence object.
  */
 async function vlmDescribe(config, data, mediaType, prompt, signal, structured = false) {
+  const route = config.route
+  const wire = PROTOCOLS[route.protocol]
   const base64 = Buffer.from(data).toString('base64')
-  const payload = {
-    model: config.model,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'text', text: prompt },
-        { type: 'image_url', image_url: { url: 'data:' + mediaType + ';base64,' + base64 } },
-      ],
-    }],
-    max_tokens: config.maxTokens,
-    stream: false,
-  }
+  const payload = wire.body({ ...route, maxTokens: config.maxTokens }, base64, mediaType, prompt)
   let response
   try {
-    response = await buildRequest(config.baseURL, payload, signal, config.timeoutMs)
+    response = await buildRequest(route, wire, payload, signal, config.timeoutMs)
   } catch (error) {
-    // Name the endpoint: the usual cause is nothing listening there, and
-    // an error that does not say where it dialled sends the model guessing.
-    throw new Error('vision: request to ' + config.baseURL + ' failed (' + String(error) + ')')
+    // Name the endpoint: the usual cause is nothing listening there, and an
+    // error that does not say where it dialled sends the model guessing.
+    throw new Error('vision: request to ' + route.baseURL + ' (' + route.protocol + ') failed (' + String(error) + ')')
   }
   if (!response.ok) {
     const body = await response.text().catch(() => '')
-    throw new Error('vision: ' + config.baseURL + ' returned HTTP ' + response.status + ': ' + body.slice(0, 300))
+    // The endpoint's own body says whether the key, the model id or the
+    // format was wrong; passing it through is what makes that fixable.
+    throw new Error('vision: ' + route.baseURL + ' returned HTTP ' + response.status + ': ' + body.slice(0, 300))
   }
   const json = await response.json()
-  const message = json?.choices?.[0]?.message
-  // Reasoning VLMs (e.g. qwen3.5-9b-vlm) emit the final answer in `content`,
-  // but only after burning tokens on `reasoning_content`. With a tight token
-  // budget the model can stop mid-thought, leaving `content` empty — prefer
-  // any non-empty field over the empty string.
-  const content = (message?.content ?? '').trim()
-  const reasoning = (message?.reasoning_content ?? '').trim()
-  const answer = content.length > 0 ? content : reasoning
-  if (answer.length === 0) throw new Error('vision: ' + config.model + ' returned an empty answer')
+  const answer = wire.answer(json)
+  if (answer.length === 0) throw new Error('vision: ' + route.model + ' returned an empty answer')
   if (!structured) return answer
   return normalizeEvidence(extractJsonObject(answer), answer)
 }
 
 export function apply(ctx, config) {
-  // Declare the route BEFORE the model needs it. A vision endpoint is a
-  // deployment fact the model cannot discover except by calling and failing,
-  // and a model that discovers it by failing tends to describe the image from
-  // the filename instead of saying it could not look at it.
+  const route = resolveRoute(config)
+  const configured = route.missing.length === 0
+
+  // Declare the route BEFORE the model needs it, whether or not there is one.
+  // Which multimodal model reads your images is a deployment fact the model
+  // cannot discover except by calling and failing — and a model that finds out
+  // by failing describes the image from its filename instead of saying it
+  // could not look at it. This section is registered unconditionally for the
+  // same reason astock declares its data sources even when the provider is
+  // absent: the model has to be able to choose its route before it commits.
   ctx.systemPrompt.section({
     name: 'vision:endpoint',
-    text: 'Image understanding: the `vision` tool sends an image file to '
-      + config.model + ' at ' + config.baseURL + ' and returns what that model reports. '
-      + 'It is the only way you can see an image; you cannot read image bytes yourself. '
-      + 'If the tool errors (nothing serving that endpoint, HTTP error, empty answer), say '
-      + 'the image could not be read and what the error was. Never describe an image from '
-      + 'its filename, its path, or the surrounding conversation.',
+    text: configured
+      ? 'Image understanding: the `vision` tool sends an image file to ' + route.model
+        + ' (' + route.label + ') and returns what that model reports. '
+        + 'It is the only way you can see an image; you cannot read image bytes yourself. '
+        + 'If the tool errors (nothing serving that endpoint, HTTP error, empty answer), say '
+        + 'the image could not be read and what the error was. Never describe an image from '
+        + 'its filename, its path, or the surrounding conversation.'
+      : 'Image understanding is NOT available: the vision plugin is missing '
+        + route.missing.join(' and ') + ', so there is no `vision` tool and you cannot see '
+        + 'images at all. When asked about the content of an image, say plainly that you '
+        + 'cannot look at it and what has to be set in the vision plugin settings. Never '
+        + 'describe an image from its filename, its path, or the surrounding conversation, '
+        + 'and do not substitute another tool for looking at it.',
   })
+
+  if (!configured) {
+    // Say which field, in the log as well: "it does nothing" is the report we
+    // would otherwise get, and the answer is always one of these three.
+    ctx.logger?.warn?.('[vision] not configured (' + route.missing.join(', ')
+      + ' missing for provider ' + route.provider + '); the tool stays unregistered')
+    return
+  }
+
+  // Everything below runs against the resolved route, so the request and its
+  // error messages carry that rather than the raw config.
+  config = { ...config, route }
 
   // ── Optional vision-bridge service ────────────────────────────────────────
   // Lets the host admit uploaded-image prompts on a text-only route: each image
@@ -613,8 +818,11 @@ export function apply(ctx, config) {
       const answer = await vlmDescribe(config, data, mediaType, buildPrompt(args.question, config.structured), exec.signal, config.structured)
 
       return {
+        // The resolved model, not the configured one: with a provider preset
+        // the config field is empty, and a value saying '' would misattribute
+        // every answer in the transcript.
         file: target.displayPath,
-        model: config.model,
+        model: route.model,
         answer,
       }
     },

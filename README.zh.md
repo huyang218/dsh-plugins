@@ -41,7 +41,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | 插件 | 做什么 | 包名 |
 | --- | --- | --- |
 | [astock](packages/astock) | A 股行情、K 线、技术指标、全市场筛选、财报、资金流、可转债——免费,少数工具需 Tushare token | `dsh-plugin-astock` |
-| [vision](packages/vision) | 让纯文本 agent 中途调用多模态模型:把图片发给 OpenAI 兼容视觉端点,返回结构化证据——需要一个端点,不需要 key | `dsh-plugin-vision` |
+| [vision](packages/vision) | 让纯文本 agent 中途调用多模态模型——Qwen / Kimi / OpenAI / Claude / Gemini,返回结构化证据而不是散文 | `dsh-plugin-vision` |
 | [ainfo](packages/ainfo) | A 股新闻、券商研报、业绩预告、分红、股东增减持、十大股东——需 Tushare token | `dsh-plugin-ainfo` |
 | [aportfolio](packages/aportfolio) | 跨会话记住持仓与自选,实时估值,给出盈亏、占比与目标价触发 | `dsh-plugin-aportfolio` |
 

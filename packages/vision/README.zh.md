@@ -2,8 +2,8 @@
 
 [English](README.md) · 中文
 
-让纯文本 agent 在任务中途调用多模态模型。`vision` 工具把一个图片文件发给 OpenAI 兼容的
-视觉端点,返回那个模型报告的内容——**图片本身从不进入主模型的上下文**,所以纯文本路由照常
+让纯文本 agent 在任务中途调用多模态模型。`vision` 工具把一个图片文件发给 Qwen、Kimi、
+OpenAI、Claude、Gemini 或你自己的端点,返回那个模型报告的内容——**图片本身从不进入主模型的上下文**,所以纯文本路由照常
 工作,看一张图的代价是一次工具调用,而不是换模型。
 
 > 复制自 [gloryxpnv/dsh-tool-vision](https://github.com/gloryxpnv/dsh-tool-vision)
@@ -37,19 +37,37 @@
 dsh plugin --profile web add dsh-plugin-vision
 ```
 
-## 端点
+## 服务商
 
-任何接受 `image_url` 部件的 OpenAI 兼容 `/chat/completions`。默认值假设本机跑着
-[LM Studio](https://lmstudio.ai),所以这里不需要任何 API key:
+选一个,填上 key。端点、线格式和起步模型 id 都跟着走:
+
+| `provider` | 端点 | 格式 | 起步模型 |
+| --- | --- | --- | --- |
+| `qwen`(默认) | DashScope 兼容模式 | OpenAI | `qwen-vl-max-latest` |
+| `kimi` | Moonshot | OpenAI | `moonshot-v1-8k-vision-preview` |
+| `openai` | OpenAI | OpenAI | `gpt-4o` |
+| `claude` | Anthropic | Anthropic | `claude-sonnet-5` |
+| `gemini` | Google | Gemini | `gemini-2.5-flash` |
+| `custom` | 你自己的 | 由 `protocol` 决定 | — |
+
+支持三种线格式,因为它们确实不一样:OpenAI 打 `/chat/completions`,图片是 `data:` URI,
+用 bearer token;Anthropic 打 `/messages`,图片是 base64 的 `source` 块,用 `x-api-key`
+头并且**必须**带 `anthropic-version`;Gemini 打 `/models/<id>:generateContent`,图片是
+`inline_data`,用 `x-goog-api-key`。起步模型 id 只是起点,不是对你账号权限的断言——按你的
+key 实际能用的模型改 `model`。
 
 ```yaml
 - id: vision
   config:
-    baseURL: 'http://127.0.0.1:1234/v1'
-    model: 'qwen3.5-9b-vlm'
+    provider: kimi
+    apiKey: '…'
 ```
 
-改这两个值就能指向托管端点。所有字段都在安装表单里,不需要碰命令行。
+自建或本地服务用 `provider: custom`,自己填 `baseURL` / `model` / `protocol`;**本机回环
+端点不需要 key**,所以 LM Studio 跑在 `http://127.0.0.1:1234/v1` 时 `apiKey` 留空即可。
+
+这条路线补齐之前,插件**不注册任何工具**,并在系统提示词里明确告诉模型:它看不了图、还缺
+什么——而不是留一个必然失败的工具在那里。日志里也会说同一件事,否则你只会看到「这插件没反应」。
 
 > [!IMPORTANT]
 > 插件会**在模型需要之前**就把端点和模型名写进系统提示词,并要求它:调用失败就如实报告,
@@ -75,8 +93,11 @@ dsh plugin --profile web add dsh-plugin-vision
 
 | 键 | 默认值 | 决定什么 |
 | --- | --- | --- |
-| `baseURL` | `http://127.0.0.1:1234/v1` | OpenAI 兼容端点根地址 |
-| `model` | `qwen3.5-9b-vlm` | 端点提供的视觉模型 id |
+| `provider` | `qwen` | 由谁来看图,以及随之而来的端点与格式 |
+| `apiKey` | *(空,非本机必填)* | 该服务的凭证 |
+| `baseURL` | *(空,= provider 的地址)* | 端点根地址;`custom` 时必填 |
+| `model` | *(空,= provider 的起步模型)* | 视觉模型 id |
+| `protocol` | `openai` | 线格式,**仅** `provider: custom` 时生效 |
 | `structured` | `true` | 要固定形状的证据而不是散文 |
 | `maxTokens` | `8192` | 输出预算——推理型模型会先花掉一部分在思考上 |
 | `timeoutMs` | `180000` | 单次请求的墙钟时间 |
@@ -87,6 +108,11 @@ dsh plugin --profile web add dsh-plugin-vision
 ## 与上游的差异
 
 - 包名改为 `dsh-plugin-vision` 以符合本仓库命名约定,插件行与导出的 `name` 同步
+- **支持 Claude、Gemini 与 OpenAI 格式的服务商**。上游只会说一种线格式;三者在端点路径、
+  鉴权头、图片编码方式上都不同,所以各自是一张小表,插件其余部分与协议无关
+- **用服务商预设取代写死的端点**。上游内置本机 LM Studio 的地址与模型 id,这在没装 LM Studio
+  的机器上意味着把图片发给那个端口上恰好在听的任何东西。现在服务商自带端点与格式,唯一必填的
+  是 key,没有 key 就不注册任何东西并在提示词里说明
 - **失败信息点名它真正打的端点**。上游无论 `baseURL` 配成什么都说 "LM Studio request
   failed",指向别的服务时会误导所有人
 - **工具声明了 `timeoutMs`**,并高于它自己的请求上限,这样慢端点会带着原因失败,而不是被

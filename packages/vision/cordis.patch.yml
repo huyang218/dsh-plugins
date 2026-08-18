@@ -1,7 +1,8 @@
 # Bundle config layer: the model-facing `vision` tool plus the optional
 # `vision-bridge` service that lets a text-only route admit pasted images as
-# descriptions. Point `baseURL` and `model` at whatever OpenAI-compatible
-# vision endpoint you run; the defaults assume LM Studio on this machine.
+# descriptions. Both `baseURL` and `model` must be set to whatever
+# OpenAI-compatible vision endpoint you run — there is no default, and until
+# they are set the plugin registers nothing and says so in the prompt.
 - insert:
     - id: vision
       name: dsh-plugin-vision

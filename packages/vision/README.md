@@ -3,8 +3,8 @@
 English · [中文](README.zh.md)
 
 Lets a text-only agent call a multimodal model in the middle of a task. The
-`vision` tool sends one image file to an OpenAI-compatible vision endpoint and
-returns what that model reports — the image never enters the main model's
+`vision` tool sends one image file to Qwen, Kimi, OpenAI, Claude, Gemini or
+your own endpoint, and returns what that model reports — the image never enters the main model's
 context, so a text-only route keeps working and the picture costs one tool call
 instead of a model switch.
 
@@ -44,21 +44,43 @@ Set `structured: false` to get the plain answer string instead.
 dsh plugin --profile web add dsh-plugin-vision
 ```
 
-## The endpoint
+## Providers
 
-Any OpenAI-compatible `/chat/completions` that accepts an `image_url` part. The
-defaults assume [LM Studio](https://lmstudio.ai) on this machine, which is why
-nothing here asks for an API key:
+Pick one and supply a key. The endpoint, the wire format and a starting model
+id come with it:
+
+| `provider` | Endpoint | Format | Starting model |
+| --- | --- | --- | --- |
+| `qwen` *(default)* | DashScope compatible mode | OpenAI | `qwen-vl-max-latest` |
+| `kimi` | Moonshot | OpenAI | `moonshot-v1-8k-vision-preview` |
+| `openai` | OpenAI | OpenAI | `gpt-4o` |
+| `claude` | Anthropic | Anthropic | `claude-sonnet-5` |
+| `gemini` | Google | Gemini | `gemini-2.5-flash` |
+| `custom` | yours | `protocol` decides | — |
+
+Three wire formats are spoken, because they genuinely differ: OpenAI posts
+`/chat/completions` with the image as a `data:` URI and a bearer token;
+Anthropic posts `/messages` with a base64 `source` block, an `x-api-key`
+header and a required `anthropic-version`; Gemini posts
+`/models/<id>:generateContent` with `inline_data` and an `x-goog-api-key`. The
+starting model ids are a place to begin, not a claim about your account —
+override `model` with whatever your key is entitled to.
 
 ```yaml
 - id: vision
   config:
-    baseURL: 'http://127.0.0.1:1234/v1'
-    model: 'qwen3.5-9b-vlm'
+    provider: kimi
+    apiKey: '…'
 ```
 
-Point it at a hosted endpoint by changing those two values. Every field is in
-the install dialog, so this needs no command line.
+A self-hosted or local runtime is `provider: custom` with its own `baseURL`,
+`model` and `protocol`; a **loopback endpoint needs no key**, so LM Studio on
+`http://127.0.0.1:1234/v1` works with `apiKey` left empty.
+
+Until the route is complete the plugin **registers no tool at all**, and the
+system prompt tells the model plainly that it cannot see images and names what
+is missing — rather than leaving it a tool that always fails. The log says the
+same thing, because "the plugin does nothing" is otherwise the whole report.
 
 > [!IMPORTANT]
 > The plugin states the endpoint and model in the system prompt **before** the
@@ -93,8 +115,11 @@ description.
 
 | Key | Default | What it decides |
 | --- | --- | --- |
-| `baseURL` | `http://127.0.0.1:1234/v1` | OpenAI-compatible endpoint root |
-| `model` | `qwen3.5-9b-vlm` | the vision model id the endpoint serves |
+| `provider` | `qwen` | which service looks, and so the endpoint and format |
+| `apiKey` | *(empty — required unless local)* | the credential for that service |
+| `baseURL` | *(empty — the provider's)* | endpoint root; required for `custom` |
+| `model` | *(empty — the provider's)* | the vision model id |
+| `protocol` | `openai` | wire format, **only** when `provider: custom` |
 | `structured` | `true` | fixed-shape evidence instead of prose |
 | `maxTokens` | `8192` | output budget — reasoning models spend part of it thinking |
 | `timeoutMs` | `180000` | wall time for one request |
@@ -106,6 +131,15 @@ description.
 
 - Renamed to `dsh-plugin-vision` for this repository's naming convention, with
   the plugin row and exported name following
+- **Claude, Gemini and OpenAI-format providers are all supported.** Upstream
+  spoke one wire format; the three differ in the endpoint path, the auth
+  header and how an image is encoded, so each is a small table entry and the
+  rest of the plugin is protocol-agnostic
+- **Providers instead of a hardcoded endpoint.** Upstream shipped a local LM
+  Studio address and model id, which works until it doesn't: an unconfigured
+  install posts images at whatever holds that port. Now a provider carries its
+  own endpoint and format, the key is the only required field, and without one
+  the plugin registers nothing and says so in the prompt
 - **Failures name the endpoint they dialled.** Upstream said "LM Studio request
   failed" whatever the configured `baseURL` was, which misdirects everyone
   pointing it at something else

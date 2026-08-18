@@ -43,7 +43,7 @@ compatibility; `ui/productivity` covers the web client's own ergonomics.
 | Plugin | What it does | Package |
 | --- | --- | --- |
 | [astock](packages/astock) | A-share quotes, K-lines, indicators, whole-market screening, financials, money flow, convertible bonds — free, a few tools need a Tushare token | `dsh-plugin-astock` |
-| [vision](packages/vision) | Lets a text-only agent call a multimodal model mid-task: one image file to an OpenAI-compatible vision endpoint, back as structured evidence — needs an endpoint, not a key | `dsh-plugin-vision` |
+| [vision](packages/vision) | Lets a text-only agent call a multimodal model mid-task — Qwen, Kimi, OpenAI, Claude or Gemini — and get back structured evidence rather than prose | `dsh-plugin-vision` |
 | [ainfo](packages/ainfo) | A-share news, broker research, earnings pre-announcements, dividends, insider trades, shareholders — needs a Tushare token | `dsh-plugin-ainfo` |
 | [aportfolio](packages/aportfolio) | Holdings and watchlist that survive the session, priced live, with profit, weights and target hits | `dsh-plugin-aportfolio` |
 

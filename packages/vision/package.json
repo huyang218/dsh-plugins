@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-vision",
   "version": "0.1.0",
-  "description": "Lets a text-only agent call a multimodal model mid-task: the vision tool sends one image file to any OpenAI-compatible vision endpoint and returns structured evidence — summary, verbatim OCR, layout, entities, and what the model could not determine.",
+  "description": "Lets a text-only agent call a multimodal model mid-task: the vision tool sends one image file to Qwen, Kimi, OpenAI, Claude, Gemini or a self-hosted endpoint and returns structured evidence — summary, verbatim OCR, layout, entities, and what the model could not determine.",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
