@@ -11,21 +11,16 @@ edit it.
 
 ## Plugins
 
-### [`packages/tools/`](packages/tools) — capabilities the model can call
+| Plugin | Group | What it does |
+| --- | --- | --- |
+| [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A-share market data: quotes, K-lines, technical indicators, and whole-market batch tools that screen thousands of stocks in one call |
+| [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel |
 
-| Plugin | What it does |
-| --- | --- |
-| [`astock`](packages/tools/astock) | A-share market data: quotes, K-lines, technical indicators, and whole-market batch tools for screening thousands of stocks in one call |
+Groups — each with its own README of conventions and pitfalls:
 
-### [`packages/runtime/`](packages/runtime) — how the harness itself behaves
-
-| Plugin | What it does |
-| --- | --- |
-| [`gateway-compat`](packages/runtime/gateway-compat) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel |
-
-### [`packages/ui/`](packages/ui) — web client extensions
-
-Empty for now.
+- [**`tools/`**](packages/tools) — capabilities the model can call.
+- [**`runtime/`**](packages/runtime) — how the harness itself behaves.
+- [**`ui/`**](packages/ui) — web client extensions. Empty for now.
 
 ## Why the layout
 

@@ -1,0 +1,41 @@
+{
+  "name": "dsh-plugin-tushare",
+  "version": "0.1.0",
+  "description": "Shared Tushare Pro access for DeepSeek Harness finance plugins: one token, one per-interface quota gate, one trading calendar, and errors that tell an agent whether the token lacks permission or the quota just needs a moment.",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "tushare",
+    "a-share",
+    "market-data",
+    "provider"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huyang218/dsh-plugins.git",
+    "directory": "packages/runtime/tushare"
+  },
+  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/runtime/tushare#readme",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test 'test/*.test.js'"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "category": "runtime/provider"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  }
+}

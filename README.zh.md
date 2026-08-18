@@ -10,21 +10,16 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 
 ## 插件
 
-### [`packages/tools/`](packages/tools) — 模型可调用的能力
+| 插件 | 分组 | 作用 |
+| --- | --- | --- |
+| [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A 股行情数据:实时行情、K 线、技术指标,以及一次调用扫完全市场的批量筛选工具 |
+| [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 |
 
-| 插件 | 作用 |
-| --- | --- |
-| [`astock`](packages/tools/astock) | A 股行情数据:实时行情、K 线、技术指标,以及一次调用扫完全市场的批量筛选工具 |
+分组(每个分组都有自己的 README,写清该形态特有的约定和坑):
 
-### [`packages/runtime/`](packages/runtime) — 改变 harness 自身的行为
-
-| 插件 | 作用 |
-| --- | --- |
-| [`gateway-compat`](packages/runtime/gateway-compat) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 |
-
-### [`packages/ui/`](packages/ui) — Web 客户端扩展
-
-暂空。
+- [**`tools/`**](packages/tools) —— 模型可调用的能力。
+- [**`runtime/`**](packages/runtime) —— 改变 harness 自身的行为。
+- [**`ui/`**](packages/ui) —— Web 客户端扩展,暂空。
 
 ## 为什么这样分
 

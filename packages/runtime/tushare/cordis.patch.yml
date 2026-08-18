@@ -1,0 +1,4 @@
+# dsh-plugin-tushare bundle layer: provides the shared `tushare` service.
+- insert:
+    - id: tushare
+      name: dsh-plugin-tushare
