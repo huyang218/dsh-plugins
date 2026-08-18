@@ -12,6 +12,11 @@ dsh plugin --profile web add dsh-plugin-aportfolio
 自包含:自己从东方财富公开接口取价,不需要 token,也不依赖其他插件。只需要一个
 存储后端,标准 profile 已经组装好了。
 
+> [!NOTE]
+> 它的结果卡片依赖 `presentationMeta` 投影,而 `run_code` 内部分发的调用拿不到它。
+> 纯 Code Mode 预设下答案不受影响,但卡片会退回通用卡片——见
+> [工具呈现模式](../../docs/presentation-modes.zh.md)。
+
 ## 工具
 
 | 工具 | 作用 |

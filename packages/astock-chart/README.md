@@ -20,7 +20,8 @@ the bundle up on the next load.
 > series ever reaches the browser and you get the generic row instead of a
 > chart. Use a preset whose tool presentation is `native` or `both`; `both`
 > keeps `run_code` available for batch work while single-stock lookups stay
-> native and drawable.
+> native and drawable. What that choice costs the rest of your plugins is in
+> [tool presentation modes](../../docs/presentation-modes.md).
 
 ## How it renders
 

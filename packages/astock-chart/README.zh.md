@@ -16,6 +16,7 @@ dsh plugin --profile web add dsh-plugin-astock-chart
 > `run_code`,而 code-dispatch 的子调用**没有卡片**——运行时会跳过它的 `presentationMeta`,
 > 于是序列根本到不了浏览器,你看到的就是通用行而不是图。请使用工具呈现模式为 `native`
 > 或 `both` 的预设;`both` 既保留 run_code 做批量活,又让单只查询走原生调用、可以画图。
+> 这个选择对你其他插件的影响见[工具呈现模式](../../docs/presentation-modes.zh.md)。
 
 ## 渲染方式
 

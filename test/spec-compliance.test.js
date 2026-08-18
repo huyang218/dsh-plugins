@@ -193,3 +193,26 @@ test('both root READMEs account for every category in use', () => {
     assert.deepEqual(missing, [], `${file} never mentions: ${missing.join(', ')}`)
   }
 })
+
+test('a plugin whose behaviour depends on the presentation mode says so', () => {
+  // The mode is picked once per agent preset for the whole session, so a
+  // plugin cannot detect or fix a mismatch at runtime — a card just stays
+  // empty and nothing errors. Saying which mode it needs is the only
+  // mechanism available, which makes leaving it out a real defect.
+  for (const { dir, pkg } of all) {
+    const projectsMeta = ['lib', 'client']
+      .map(sub => join(dir, sub))
+      .filter(existsSync)
+      .flatMap(sub => readdirSync(sub, { recursive: true }).map(file => join(sub, String(file))))
+      .filter(file => file.endsWith('.js'))
+      .some(file => readFileSync(file, 'utf8').includes('presentationMeta'))
+    const isClient = String(pkg.dsh?.category ?? '').startsWith('ui/')
+    if (!projectsMeta && !isClient) continue
+
+    for (const file of ['README.md', 'README.zh.md']) {
+      const text = readFileSync(join(dir, file), 'utf8')
+      assert.match(text, /presentation|呈现模式|Code Mode/i,
+        `${dir}/${file} never says how the tool presentation mode affects it`)
+    }
+  }
+})

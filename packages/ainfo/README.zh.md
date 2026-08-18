@@ -22,6 +22,11 @@ dsh plugin --profile web add dsh-plugin-tushare
     token: '你的 tushare token'
 ```
 
+> [!NOTE]
+> 它的结果卡片依赖 `presentationMeta` 投影,而 `run_code` 内部分发的调用拿不到它。
+> 纯 Code Mode 预设下答案不受影响,但卡片会退回通用卡片——见
+> [工具呈现模式](../../docs/presentation-modes.zh.md)。
+
 ## 工具
 
 **这里的每个工具都需要 Tushare token,且没有免费替代**——这类数据没有稳定可用的公开

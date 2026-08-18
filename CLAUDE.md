@@ -16,7 +16,7 @@ runtime/…    对模型不可见:waterfall 包装与共享服务       gateway-
 ui/…         Web 客户端扩展                            astock-chart
 ```
 
-三种形态各自的约定和坑写在 `docs/authoring-{tools,runtime,ui}.md`。业务场景由包名和各自 README 体现。客户定制组合不放在这个公开仓库里。
+三种形态各自的约定和坑写在 `docs/authoring-{tools,runtime,ui}.md`;**工具呈现模式**(native / code / both)对插件的连带影响写在 `docs/presentation-modes.md`(中英双份)——模式由 agent 预设按 scope 选定一次、覆盖会话里的**所有**工具,`presentAs` 一个组合只能声明一种,所以为某个插件选的模式会改变其他所有插件的调用方式。合规检查会强制:投影 `presentationMeta` 或 `ui/` 分类的包,两份 README 都要说明模式对它的影响。业务场景由包名和各自 README 体现。客户定制组合不放在这个公开仓库里。
 
 - 参考文档:dsh 源码仓库在 `~/Documents/code/open/deepseek-harness`,插件开发看 `docs/user/develop/`(入门)、`docs/cookbook/adding-a-tool.md`(工具进阶)、`docs/cookbook/extension-cookbook.md`(扩展形态)、`docs/architecture.md`(扩展点总表)。
 - 本机的 dsh 以桌面壳应用 "dsh Desktop.app" 运行(壳项目在 `~/Documents/code/alpha/dsh-desktop`,原名 dsh-shell,已装到 `/Applications`)。改壳代码后要重新打包并部署:`npx electron-builder --mac dir` → 退出应用 → `ditto dist/mac-arm64/"dsh Desktop.app" /Applications/`(菜单的"重启服务"只重启 dsh 服务进程,不加载新的壳代码)。

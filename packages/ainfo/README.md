@@ -25,6 +25,12 @@ dsh plugin --profile web add dsh-plugin-tushare
     token: 'your-tushare-token'
 ```
 
+> [!NOTE]
+> Its result cards carry a `presentationMeta` projection, which a call
+> dispatched inside `run_code` never receives. Under a pure Code Mode
+> preset the answers are unaffected but the cards fall back to the generic
+> one — see [tool presentation modes](../../docs/presentation-modes.md).
+
 ## Tools
 
 **Every tool here needs a Tushare Pro token, and none has a free fallback** —

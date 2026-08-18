@@ -87,6 +87,12 @@ also write by hand:
 > rather than merging keys — so restate every key you need when overriding
 > someone else's row.
 
+**Tool presentation** — whether a session dispatches tools natively, through
+Code Mode, or both — is chosen once per agent preset and applies to every tool
+in the session, not per plugin. Some plugins here require a particular mode,
+and the choice affects every other plugin you install:
+[tool presentation modes](docs/presentation-modes.md).
+
 ## Develop
 
 ```sh

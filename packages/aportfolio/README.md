@@ -14,6 +14,12 @@ Self-contained: it fetches its own prices from EastMoney's public endpoint and
 needs no token and no other plugin. It does need a storage backend, which the
 standard profile composes.
 
+> [!NOTE]
+> Its result cards carry a `presentationMeta` projection, which a call
+> dispatched inside `run_code` never receives. Under a pure Code Mode
+> preset the answers are unaffected but the cards fall back to the generic
+> one — see [tool presentation modes](../../docs/presentation-modes.md).
+
 ## Tools
 
 | Tool | What it does |
