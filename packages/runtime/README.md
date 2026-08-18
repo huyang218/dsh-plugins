@@ -1,7 +1,7 @@
-# runtime/
+# `runtime/`
 
-Plugins that change **how the harness itself behaves**: LLM stream handling,
-tool dispatch policy, retries, deadlines, metrics, audit.
+> Plugins that change **how the harness itself behaves**: LLM stream handling,
+> tool dispatch policy, retries, deadlines, metrics, audit.
 
 They listen on waterfall extension points instead of registering tools, so they
 are **invisible to the model** — no schemas, no prompt text, no tokens. The
@@ -9,9 +9,16 @@ model's behaviour changes because the machinery around it changed.
 
 ## Plugins in this group
 
-| Plugin | Extension point | What it does |
+| Plugin | Shape | What it does |
 | --- | --- | --- |
-| [`gateway-compat`](gateway-compat) | `llm/stream` | Tolerates OpenAI-style gateways whose SSE stream ends without the `[DONE]` sentinel |
+| [**gateway-compat**](gateway-compat) | `llm/stream` listener | Tolerates OpenAI-style gateways whose SSE stream ends without the `[DONE]` sentinel |
+| [**tushare**](tushare) | `tushare` service | Shared Tushare Pro access for the finance plugins: one token, one quota gate, one calendar, and typed failures |
+
+Two shapes live here, and both are invisible to the model: **waterfall
+listeners**, which change how the harness runs, and **service providers**,
+which hold something several plugins need. A provider belongs here rather than
+in `tools/` because it registers no tools — what it exposes is `ctx.<name>`,
+for other plugins to inject.
 
 ## Picking the extension point
 

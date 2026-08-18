@@ -1,8 +1,8 @@
-# ui/
+# `ui/`
 
-Plugins that extend the **web client** — conversation nodes, panels, settings
-pages, themes. Where `tools/` changes what the model can do and `runtime/`
-changes how the harness runs, these change what the person sees.
+> Plugins that extend the **web client** — conversation nodes, panels, settings
+> pages, themes. Where `tools/` changes what the model can do and `runtime/`
+> changes how the harness runs, these change what the person sees.
 
 **Empty for now.** The directory marks where such plugins belong.
 

@@ -1,9 +1,19 @@
+<div align="center">
+
 # dsh-plugins
 
-[English](README.md) | 中文
-
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(dsh)的插件仓库。
+**[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(dsh)的插件仓库** ——
 dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Build-free ESM](https://img.shields.io/badge/build-none-brightgreen.svg)](#开发)
+[![Tests: node:test](https://img.shields.io/badge/tests-node%3Atest-informational.svg)](#开发)
+
+[English](README.md) · 中文
+
+</div>
+
+---
 
 这里每个包都是可安装的 dsh **组合包(bundle)**:纯 ESM、免构建,可以从 npm 装、
 从 git 装,也可以直接指向源码目录一边改一边用。
@@ -17,15 +27,20 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | — |
 | [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 | — |
 
-金融插件通过 `tushare` provider 共用一份凭证,而不是各自向用户要同一个 token;
-每个需要凭证的工具都在自己的描述里写明——这样模型能在有免费替代时选免费的,
-在没有时如实告诉用户缺什么。
+> [!NOTE]
+> 金融插件通过 `tushare` provider 共用一份凭证,而不是各自向用户要同一个 token。
+> 每个需要凭证的工具都**在自己的描述里写明**——这样模型能在有免费替代时选免费的,
+> 在没有时如实告诉用户缺什么。
 
-分组(每个分组都有自己的 README,写清该形态特有的约定和坑):
+### 分组
 
-- [**`tools/`**](packages/tools) —— 模型可调用的能力。
-- [**`runtime/`**](packages/runtime) —— 改变 harness 自身的行为。
-- [**`ui/`**](packages/ui) —— Web 客户端扩展,暂空。
+| 目录 | 放什么 | 对模型可见 |
+| --- | --- | :---: |
+| [**`tools/`**](packages/tools) | 模型可调用的能力 | 是 |
+| [**`runtime/`**](packages/runtime) | waterfall 包装与共享服务 | 否 |
+| [**`ui/`**](packages/ui) | Web 客户端扩展 *(暂空)* | — |
+
+每个分组的 README 写清该形态特有的约定和坑。
 
 ## 为什么这样分
 
@@ -75,8 +90,9 @@ dsh --profile web --dump-config      # 看插件对应的那一行
     tushareToken: '你的 token'
 ```
 
-层顺序上后应用者按行胜出,并且 patch 是**整行 config 替换、不深度合并**——覆盖
-别人的行时要把需要的键全部重述一遍。
+> [!IMPORTANT]
+> 层顺序上后应用者按行胜出,并且 patch 是**整行 config 替换、不深度合并**——
+> 覆盖别人的行时要把需要的键全部重述一遍。
 
 ## 开发
 
@@ -91,7 +107,10 @@ node --test packages/tools/astock/test/*.test.js   # 单个文件
 一致。测试跑的是真实发布入口(`lib/index.js`)和真实的 `defineTool`,所以 schema
 违规会在单测阶段就红,而不是等到 dsh 启动时才崩。
 
-单测绿不等于可以交付。[CLAUDE.md](CLAUDE.md) 是完整的开发规范——插件生命周期、
+> [!TIP]
+> 单测绿不等于可以交付——它不经过 Loader,也不经过真实组合。
+
+[CLAUDE.md](CLAUDE.md) 是完整的开发规范——插件生命周期、
 配置、工具编写、waterfall 扩展点、bundle 分层、测试约定,以及改完插件后的验证
 清单。它写给 AI 编码 agent,但人类贡献者需要的规则完全相同。
 

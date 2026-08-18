@@ -1,14 +1,15 @@
-# tools/
+# `tools/`
 
-Plugins that give the model **new capabilities**. They call
-`ctx.tools.register(defineTool(...))`, so their tools appear in the model's
-schema list and the model decides when to call them.
+> Plugins that give the model **new capabilities**. They call
+> `ctx.tools.register(defineTool(...))`, so their tools appear in the model's
+> schema list and the model decides when to call them.
 
 ## Plugins in this group
 
-| Plugin | Tools | Needs credentials |
+| Plugin | Covers | Needs credentials |
 | --- | --- | --- |
-| [`astock`](astock) | A-share quotes, K-lines, technical indicators, whole-market screening | Optional [Tushare Pro](https://tushare.pro) token for fundamentals and market-wide history |
+| [**astock**](astock) | A-share **data**: quotes, K-lines, indicators, whole-market screening, financial statements, money flow, convertible bonds | Free by default; a [Tushare Pro](https://tushare.pro) token unlocks the rest |
+| [**ainfo**](ainfo) | A-share **information**: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token for everything |
 
 ## What a tool owes its caller
 

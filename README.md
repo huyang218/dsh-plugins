@@ -1,13 +1,22 @@
+<div align="center">
+
 # dsh-plugins
 
-English | [中文](README.zh.md)
+**Plugins for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)** — the
+"everything is a plugin" agent runtime built on Cordis.
 
-Plugins for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
-(dsh) — the "everything is a plugin" agent runtime built on Cordis.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Build-free ESM](https://img.shields.io/badge/build-none-brightgreen.svg)](#develop)
+[![Tests: node:test](https://img.shields.io/badge/tests-node%3Atest-informational.svg)](#develop)
 
-Every package here is an installable dsh **bundle**: pure ESM with no build
-step, so it runs from npm, from git, or straight from a checkout while you
-edit it.
+English · [中文](README.zh.md)
+
+</div>
+
+---
+
+Every package here is an installable dsh **bundle**: pure ESM, no build step, so
+it runs from npm, from git, or straight from a checkout while you edit it.
 
 ## Plugins
 
@@ -18,16 +27,21 @@ edit it.
 | [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
 | [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel | — |
 
-Finance plugins share one credential through the `tushare` provider rather than
-each asking for the same token, and every tool that needs it says so in its own
-description — so the model can choose a free tool when one will do, and tell
-you exactly what is missing when one will not.
+> [!NOTE]
+> Finance plugins share one credential through the `tushare` provider rather
+> than each asking for the same token. Every tool that needs it says so **in its
+> own description**, so the model can choose a free tool when one will do — and
+> tell you exactly what is missing when one will not.
 
-Groups — each with its own README of conventions and pitfalls:
+### Groups
 
-- [**`tools/`**](packages/tools) — capabilities the model can call.
-- [**`runtime/`**](packages/runtime) — how the harness itself behaves.
-- [**`ui/`**](packages/ui) — web client extensions. Empty for now.
+| Directory | Holds | Visible to the model |
+| --- | --- | :---: |
+| [**`tools/`**](packages/tools) | Capabilities the model can call | yes |
+| [**`runtime/`**](packages/runtime) | Waterfall wrappers and shared services | no |
+| [**`ui/`**](packages/ui) | Web client extensions *(empty for now)* | — |
+
+Each group's README carries the conventions and pitfalls of that shape.
 
 ## Why the layout
 
@@ -79,9 +93,10 @@ also write by hand:
     tushareToken: 'your-token'
 ```
 
-Later layers win per row, and a patch **replaces a row's whole `config`** rather
-than merging keys — so restate every key you need when overriding someone
-else's row.
+> [!IMPORTANT]
+> Later layers win per row, and a patch **replaces a row's whole `config`**
+> rather than merging keys — so restate every key you need when overriding
+> someone else's row.
 
 ## Develop
 
@@ -97,8 +112,11 @@ matching the way the plugins themselves load. They exercise the real published
 entry (`lib/index.js`) and the real `defineTool`, so a schema violation fails in
 unit tests instead of at dsh startup.
 
-Green tests are not the whole bar. [CLAUDE.md](CLAUDE.md) carries the full
-working spec — plugin lifecycle, config, tool authoring, waterfall extension
+> [!TIP]
+> Green tests are not the whole bar — they never touch the Loader or a real
+> composition.
+
+[CLAUDE.md](CLAUDE.md) carries the full working spec — plugin lifecycle, config, tool authoring, waterfall extension
 points, bundle layering, the test convention, and the verification checklist to
 run after changing a plugin. It is addressed to AI coding agents, but the rules
 are the same ones a human contributor needs.
@@ -114,7 +132,7 @@ are the same ones a human contributor needs.
 4. Add `test/plugin.test.js` covering the export shape and every registration.
 5. Run `npm test` and the checklist in CLAUDE.md.
 
-Three names travel together and are easy to confuse:
+Four names travel together and are easy to confuse:
 
 | Where | Value | Purpose |
 | --- | --- | --- |
