@@ -35,34 +35,6 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 > 每个需要凭证的工具都**在自己的描述里写明**——这样模型能在有免费替代时选免费的,
 > 在没有时如实告诉用户缺什么。
 
-### 分组
-
-每个插件都直接放在 `packages/<名字>/` —— 生态的扫描器只认这一层,目录里 1342 个
-插件没有一个嵌得更深。插件扩展的是什么,改由元数据 `dsh.category` 声明,而不是靠父目录:
-
-| `dsh.category` | 放什么 | 对模型可见 | 约定 |
-| --- | --- | :---: | --- |
-| `tools/…` | 模型可调用的能力 | 是 | [authoring-tools](docs/authoring-tools.md) |
-| `runtime/…` | waterfall 包装与共享服务 | 否 | [authoring-runtime](docs/authoring-runtime.md) |
-| `ui/…` | Web 客户端扩展 | 在浏览器里 | [authoring-ui](docs/authoring-ui.md) |
-
-## 为什么这样分
-
-目录是平的,因为生态要读它:插件目录站和应用内市场都按 `packages/<名字>/package.json`
-扫描,嵌得更深的仓库根本不会被发现。
-
-但分组本身仍然重要——决定插件怎么写、怎么审、怎么测的正是它——所以改由 `dsh.category`
-承载:
-
-- **tools** 插件注册工具、对模型可见,成败取决于 output schema;
-- **runtime** 插件挂在 waterfall 扩展点上、或提供共享服务,对模型不可见,底线是
-  绝不能把真实失败改写成虚假成功;
-- **ui** 插件发客户端产物,由 Web 客户端加载。
-
-业务领域(金融、开发工具……)由包名和各自 README 体现,这样一个插件不会需要归两次类。
-
-每个分组都有自己的 README,写清该形态特有的约定和坑。
-
 ## 安装
 
 装进 dsh profile,从 npm:
@@ -122,7 +94,9 @@ node --test packages/astock/test/*.test.js   # 单个文件
 
 ## 贡献
 
-1. 按扩展形态选分组,先读 `docs/` 里对应的指南。
+1. 按要做的东西读对应指南:[tools](docs/authoring-tools.md)(模型可调用的能力)、
+   [runtime](docs/authoring-runtime.md)(waterfall 包装与共享服务)、
+   [ui](docs/authoring-ui.md)(Web 客户端扩展)。
 2. 建 `packages/<name>/`,含 `package.json`(含 `dsh.category`)、`cordis.patch.yml`、
    `lib/index.js`、`README.md`、`LICENSE`。
 3. 用**命名导出** `name` / `inject` / `apply`。default 导出会让 Loader 丢掉
