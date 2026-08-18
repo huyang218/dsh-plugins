@@ -52,10 +52,10 @@ test('with no channel enabled it says so and registers nothing', () => {
     '"the plugin does nothing" has to be answerable from the log')
 })
 
-test('an enabled channel with an empty allowlist is warned about loudly', () => {
-  // This is the state where every message is refused and the reason is a config
-  // field nobody remembers leaving empty. Enabling a callback channel is safe
-  // here: it registers a route, it does not dial out.
+test('with nobody authorised, the log prints a pairing code', () => {
+  // Otherwise the bridge refuses every message for a reason the operator cannot
+  // see. Note this must not depend on the storage callback: a deployment
+  // without a storage backend never runs it.
   const { ctx, warnings, routes } = fakeContext()
   plugin.apply(ctx, new plugin.Config({
     lark: { enabled: true, appId: 'a', appSecret: 's', verificationToken: 't', path: '/im/lark' },
@@ -63,7 +63,29 @@ test('an enabled channel with an empty allowlist is warned about loudly', () => 
 
   assert.equal(routes.length, 1)
   assert.equal(routes[0].path, '/im/lark')
-  assert.ok(warnings.some(message => message.includes('allowFrom is empty')))
+  const notice = warnings.find(message => message.includes('pairing code'))
+  assert.ok(notice, 'the code has to be printed, not waited for')
+  assert.match(notice, /\d{6}/)
+})
+
+test('pairing off and nobody configured says every message will be refused', () => {
+  const { ctx, warnings } = fakeContext()
+  plugin.apply(ctx, new plugin.Config({
+    pairing: false,
+    qq: { enabled: true, appId: 'a', appSecret: 's' },
+  }))
+  assert.ok(warnings.some(message => message.includes('every message will be refused')))
+})
+
+test('with someone configured, no pairing code is offered', () => {
+  // A code on a bridge that already has an owner is a way in for whoever sees
+  // the log.
+  const { ctx, warnings } = fakeContext()
+  plugin.apply(ctx, new plugin.Config({
+    allowFrom: ['ou_me'],
+    qq: { enabled: true, appId: 'a', appSecret: 's' },
+  }))
+  assert.equal(warnings.some(message => message.includes('pairing code')), false)
 })
 
 test('apply completes with a channel enabled — the wiring order holds', () => {

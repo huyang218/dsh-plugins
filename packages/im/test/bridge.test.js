@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createBridge, createRoutes } from '../lib/bridge.js'
+import { createAccess, createPairing } from '../lib/access.js'
 
 /**
  * A host with one attachable agent per session, and a hand-cranked session
@@ -72,11 +73,13 @@ const CONFIG = {
 const silent = { info: () => {}, warn: () => {} }
 
 /** @returns {Object} a bridge over a fresh fake host */
-function setup(config = {}) {
+function setup(config = {}, { pairing } = {}) {
   const host = fakeHost()
   const routes = createRoutes(undefined)
-  const bridge = createBridge(host.ctx, { config: { ...CONFIG, ...config }, routes, log: silent })
-  return { host, bridge, routes }
+  const merged = { ...CONFIG, ...config }
+  const access = createAccess({ configured: merged.allowFrom, pairing, log: silent })
+  const bridge = createBridge(host.ctx, { config: merged, routes, access, log: silent })
+  return { host, bridge, routes, access }
 }
 
 const message = (text, senderId = 'ou_me', chatId = 'oc_1') => ({ text, senderId, chatId, deliveryId: 'd1' })
@@ -300,4 +303,37 @@ test('a route store backed by a table reads and writes through it', async () => 
   await routes.set('lark:oc_9', 'session-9')
   assert.equal(await routes.get('lark:oc_9'), 'session-9')
   assert.equal(typeof rows.get('lark:oc_9').at, 'number', 'the mapping records when it was made')
+})
+
+test('an unknown sender who sends the pairing code is authorised on the spot', async () => {
+  // This is what replaces "read the log for your opaque id, paste it into the
+  // config, restart a second time".
+  const pairing = createPairing()
+  const { host, bridge, access } = setup({ allowFrom: [] }, { pairing })
+  const { channel, sent } = fakeChannel()
+
+  await bridge.handle(message('hello', 'ou_phone'), channel)
+  assert.deepEqual(host.created, [], 'an unpaired sender drives nothing')
+
+  await bridge.handle(message(pairing.code, 'ou_phone'), channel)
+  const paired = sent.map(piece => piece.replace(/^\[\d+\/\d+\] /, '')).join('')
+  assert.match(paired, /Paired/)
+  assert.equal(access.allows('ou_phone'), true)
+
+  await bridge.handle(message('now do something', 'ou_phone'), channel)
+  assert.equal(host.created.length, 1, 'the next message is acted on')
+})
+
+test('the pairing code is not a prompt, and a stranger after pairing is still refused', async () => {
+  const pairing = createPairing()
+  const { host, bridge } = setup({ allowFrom: [] }, { pairing })
+  const { channel, sent } = fakeChannel()
+
+  await bridge.handle(message(pairing.code, 'ou_phone'), channel)
+  assert.deepEqual(host.submitted, [], 'the code itself is never handed to the model')
+
+  sent.length = 0
+  await bridge.handle(message(pairing.code, 'ou_someone_else'), channel)
+  assert.deepEqual(sent, [], 'the code is spent, and the second sender gets silence')
+  assert.deepEqual(host.created, [])
 })

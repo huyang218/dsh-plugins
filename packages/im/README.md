@@ -56,13 +56,30 @@ who is**:
 ```
 
 > [!WARNING]
-> `allowFrom` is empty by default and an empty allowlist admits **nobody**. This
-> is a remote control for a machine with shell and file access; the failure mode
-> of an open default is not a missing feature, it is someone else's message
-> running as you. Ids are matched exactly — no wildcards.
->
-> Don't know your id? Send the bot a message. The log prints the id it refused,
-> which is the one to paste in.
+> An empty allowlist admits **nobody**. This is a remote control for a machine
+> with shell and file access; the failure mode of an open default is not a
+> missing feature, it is someone else's message running as you. Ids are matched
+> exactly — no wildcards.
+
+### Authorising yourself: a one-time pairing code
+
+These platforms report opaque ids (`ou_3f8c…`, a QQ openid), so you cannot know
+your own until the bot has already refused you. So you don't type it: **while
+nobody is authorised, the startup log prints a six-digit code**. Send those six
+digits to the bot in a chat and you are authorised, persisted.
+
+```
+[im] nobody is authorised yet. Send this pairing code to the bot in a chat to authorise yourself: 148062
+```
+
+The bot confirms, and you can start working. **No second restart, no hunting for
+an id in a log.**
+
+The boundary: the code appears only in the **local log** (whoever can read it
+already owns the machine), is **single-use**, is offered **only while nobody is
+authorised** (so a log screenshot is not a way in later), and expires after 30
+minutes by default. Set `pairing: false` to switch it off and accept only the ids
+written into `allowFrom`.
 
 ## In the chat
 
@@ -101,6 +118,8 @@ saying so — silence is the one thing a bridge must never be mistaken for.
 | `cwd` | *(dsh's own)* | workspace for sessions started from a chat |
 | `agentPreset` | *(deployment default)* | preset for those sessions |
 | `replyChars` | `1800` | largest chat message before splitting |
+| `pairing` | `true` | allow the one-time pairing code; off means `allowFrom` only |
+| `pairingMinutes` | `30` | how long a code stays usable |
 | `language` | `zh` | language for what the bridge itself says (not the model's answers) |
 | `refusalNotice` | *(empty)* | what to tell an unauthorised sender; empty says nothing |
 | `dedupeEntries` | `500` | how many delivery ids to remember |

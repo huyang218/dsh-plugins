@@ -25,6 +25,7 @@
 import Schema from '@deepseek-ai/schemastery'
 import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
+import { createAccess, createPairing } from './access.js'
 import { createBridge, createRoutes } from './bridge.js'
 import { dingtalkChannel, larkChannel, qqChannel, wecomChannel } from './channels.js'
 import { createDedupe } from './policy.js'
@@ -44,6 +45,9 @@ const IM_DOMAIN = defineDomain({
       sessionId: z.string(),
       at: z.number().optional(),
     })),
+    // Paired senders live here so authorising a phone does not mean editing a
+    // config file and restarting a second time.
+    paired: domainTable(z.object({ at: z.number().optional() })),
   },
 })
 
@@ -72,6 +76,15 @@ const Config = Schema.object({
   replyChars: Schema.number().default(1800).description(
     '单条回复的最大字符数,超出按段切分并标 `[1/3]`。聊天平台会拒收或截断过长消息,'
     + '而被截断的答案比被切分的更糟——读者看不出后面还有。',
+  ),
+  pairing: Schema.boolean().default(true).description(
+    '允许**一次性配对码**授权。开启时,如果还没有任何授权账号,启动日志会打出一个六位码;'
+    + '在聊天里把这六位数发给机器人就完成授权,结果持久化——不用去日志里找自己的 id,也不用'
+    + '为了填 `allowFrom` 再重启一次。码是一次性的,用掉即失效,且只在「还没有任何授权账号」时提供。'
+    + '关掉它就只认 `allowFrom` 里写死的 id。',
+  ),
+  pairingMinutes: Schema.number().default(30).description(
+    '配对码的有效期(分钟)。过期后重启服务会给一个新的。',
   ),
   language: Schema.union(['zh', 'en']).default('zh').description(
     '机器人自己说的话用哪种语言(命令说明、`已取消`、`回合结束没有回复` 这类)。'
@@ -169,30 +182,63 @@ function apply(ctx, config) {
     log.warn('[im] no channel is enabled; nothing to bridge')
     return
   }
-  if (config.allowFrom.length === 0) {
-    // Loud, because this is the state where every message is refused and the
-    // reason is a config field nobody remembers being empty.
-    log.warn('[im] allowFrom is empty: every message will be refused. Add your sender id to use the bridge.')
-  }
 
   const dedupe = createDedupe(config.dedupeEntries)
 
   /** Set by `start` below, before any channel can call it. */
   let handleMessage
 
+  const pairing = config.pairing
+    ? createPairing({ ttlMs: Math.max(1, config.pairingMinutes) * 60 * 1000 })
+    : undefined
+  let access = createAccess({ configured: config.allowFrom, pairing, log })
+
   // The mapping is nice to keep, not required to work: without a storage
   // backend the bridge forgets which session a chat had and starts a new one
   // on the next message, which is recoverable. Refusing to load would not be.
   const started = start(createRoutes(undefined))
   ctx.inject(['storageDomain'], storageCtx => {
-    void storageCtx.storageDomain.open(IM_DOMAIN).then(domain => {
-      storageCtx.effect(() => () => { void domain.close().catch(() => {}) }, 'im: routes domain')
+    void storageCtx.storageDomain.open(IM_DOMAIN).then(async domain => {
+      storageCtx.effect(() => () => { void domain.close().catch(() => {}) }, 'im: im_routes domain')
       started.upgrade(createRoutes(domain.table('routes')))
-      log.info('[im] chat-to-session mapping is persisted')
+      // Rebuild access over the persisted table, then restore who was paired
+      // before the restart — otherwise every restart would ask to pair again.
+      access = createAccess({ configured: config.allowFrom, table: domain.table('paired'), pairing, log })
+      const restored = await access.restore()
+      started.useAccess(access)
+      // Only re-announce when storage changed the picture: it did if someone
+      // was already paired, which means the code printed a moment ago is void.
+      if (restored > 0) announceAccess(restored)
     }).catch(error => {
-      log.warn(`[im] chat-to-session mapping stays in memory: ${String(error)}`)
+      log.warn(`[im] state stays in memory (${String(error)}); pairing will not survive a restart`)
     })
   })
+
+  // Announced here, not inside the storage callback: a deployment with no
+  // storage backend never runs that callback, and the pairing code would never
+  // be printed — leaving a bridge that refuses every message for no stated
+  // reason.
+  announceAccess(0)
+
+  /**
+   * Say, once, how someone becomes authorised — the question every operator
+   * has at this point, and the one the log used to answer only after refusing
+   * them.
+   * @param {number} restored - paired senders recovered from storage.
+   */
+  function announceAccess(restored) {
+    const code = access.pairingCode()
+    if (code !== undefined) {
+      log.warn(`[im] nobody is authorised yet. Send this pairing code to the bot in a chat to authorise yourself: ${code}`)
+      log.warn(`[im] 还没有任何授权账号。在聊天里把这个配对码发给机器人即可授权:${code}(${config.pairingMinutes} 分钟内有效)`)
+      return
+    }
+    if (access.anyone()) {
+      log.info(`[im] authorised senders: ${config.allowFrom.length} configured, ${restored} paired`)
+      return
+    }
+    log.warn('[im] nobody is authorised and pairing is off: every message will be refused. Fill allowFrom.')
+  }
 
   /**
    * Build the bridge over a route store, allowing the store to be swapped once
@@ -203,18 +249,27 @@ function apply(ctx, config) {
    */
   function start(initial) {
     let store = initial
-    const proxy = {
-      get: key => store.get(key),
-      set: (key, sessionId) => store.set(key, sessionId),
-    }
     const bridge = createBridge(ctx, {
       config: { ...config, cwd: config.cwd || process.cwd() },
-      routes: proxy,
+      routes: {
+        get: key => store.get(key),
+        set: (key, sessionId) => store.set(key, sessionId),
+      },
+      // Indirected for the same reason as the routes: storage opens after the
+      // channels are already connected, and rebuilding them would drop a
+      // message in flight.
+      access: {
+        allows: senderId => access.allows(senderId),
+        claim: (senderId, text) => access.claim(senderId, text),
+      },
       log,
     })
     ctx.effect(() => bridge.dispose)
     handleMessage = bridge.handle
-    return { upgrade: next => { store = next } }
+    return {
+      upgrade: next => { store = next },
+      useAccess: next => { access = next },
+    }
   }
 
   /**

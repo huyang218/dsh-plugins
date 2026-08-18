@@ -18,7 +18,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { assistantText, emptyTurnNote, helpText, isAllowed, messages, parseLine, segment } from './policy.js'
+import { assistantText, emptyTurnNote, helpText, messages, parseLine, segment } from './policy.js'
 
 /**
  * Wire the chat side to the session side.
@@ -27,7 +27,7 @@ import { assistantText, emptyTurnNote, helpText, isAllowed, messages, parseLine,
  * @param {Object} options - `{ config, routes, log }`.
  * @returns {Object} `{ handle, dispose }` — `handle(inbound, channel)` per message
  */
-export function createBridge(ctx, { config, routes, log }) {
+export function createBridge(ctx, { config, routes, access, log }) {
   const say = messages(config.language)
 
   // sessionId -> what to do with this turn's output. A turn the bridge did not
@@ -125,10 +125,16 @@ export function createBridge(ctx, { config, routes, log }) {
     const chatKey = `${channel.name}:${inbound.chatId}`
     const reply = replier(channel, inbound)
 
-    if (!isAllowed(config.allowFrom, inbound.senderId)) {
+    if (!access.allows(inbound.senderId)) {
+      // A pairing code turns the first contact into the authorisation step,
+      // instead of "read the log, paste the id, restart".
+      if (await access.claim(inbound.senderId, inbound.text)) {
+        await reply(say.paired)
+        return
+      }
       // Say who was refused, in the log only: telling the chat which ids are
       // allowed would let anyone enumerate them.
-      log.warn(`[im] refused ${channel.name} sender ${inbound.senderId || '(no id)'} — not in allowFrom`)
+      log.warn(`[im] refused ${channel.name} sender ${inbound.senderId || '(no id)'} — not authorised`)
       if (config.refusalNotice.length > 0) await reply(config.refusalNotice)
       return
     }
