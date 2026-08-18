@@ -65,6 +65,34 @@
 | [Aegis](https://github.com/GanyuanRan/Aegis) | 1048 | 面向编码 Agent 的软件工程方法包，提供基线优先规划、系统化调试、提示词卫生、完成前验证，以及修复/退役双轨跟踪技能。 | — |
 | [MisakaNet](https://github.com/Ikalus1988/MisakaNet) | 404 | 失败恢复记忆库：从真实工程会话中搜索和记录失败恢复教训，支持 BM25 + 语义 RAG 检索和知识库管理。 | — |
 
+### 聊天平台——用手机给 agent 下指令
+
+下面每一个都能从聊天软件里驱动一次 agent 回合,所以一台手机就够用来派活和回答它的提问。
+两个属性决定它对你是否可行:是否需要**公网回调地址**(长连接 / Stream 模式不需要,dsh 跑在
+笔记本上时这一点很关键),以及接微信走的是**官方接口还是第三方协议网关**。个人微信没有官方
+机器人接口——能接进去的插件都在用 iLink 这类网关,违反微信条款,账号有风险。企业微信、飞书、
+钉钉、QQ 都有官方机器人。
+
+| 插件 | ★ | 作用 | 许可 |
+| --- | --: | --- | --- |
+| [dsh-im](https://github.com/xmanrui/dsh-im) | 51 | 一个插件九个渠道——飞书、微信、钉钉、企业微信、QQ、Slack、Telegram、Discord、WhatsApp,扫码或机器人凭据接入。 | MIT |
+| [dsh-notifier](https://github.com/THEWOLFWALKER/dsh-notifier) | 40 | 一个 `notify()` 打通 25+ 渠道(Telegram / 钉钉 / 飞书 / 企微 / QQ / Bark / ntfy / webhook…),另含远程控制。 | MIT |
+| [dsh-lark](https://github.com/omdsh-dev/dsh-lark) | 32 | 飞书渠道,每个会话驱动独立 agent:工具审批、模型提问、计划审阅都以卡片回到聊天;聊天里 `/cd`、`/model`、`/new`。 | BSD-3-Clause |
+| [dsh-lark-bridge](https://github.com/imetn/dsh-lark-bridge) | 7 | 飞书双向控制器,支持 Project 与 Session 路由、交互卡片、审批、附件与任务控制。 | — |
+| [dsh-feishu](https://github.com/xmanrui/dsh-feishu) | 7 | 扫码把飞书机器人接进来。 | — |
+| [dsh-im-bridge](https://github.com/BiBoyang/dsh-im-bridge) | 7 | 微信双向桥(iLink 网关):回合完成与审批推送、聊天内批准、长回复分段。**非官方协议**。 | — |
+| [dsh-feishu-bridge](https://github.com/wz-heng/dsh-feishu-bridge) | 5 | Fail-closed 的飞书桥:白名单默认全拒、webhook 验签带时间窗与防重放、每次 bash 前可弹 Allow/Deny 卡。官方 SDK 精确锁版。 | MIT |
+| [dsh-chatnode-wechat](https://github.com/Jesse-njx/dsh-chatnode-wechat) | 6 | 经 iLink 网关在微信里聊天、监控与审批。**非官方协议**。 | — |
+| [telegram](https://github.com/LoserFox/telegram) | 6 | Telegram Bot API 桥接:长轮询、per-chat 会话、HTML 格式化。 | — |
+| [dsh-slack](https://github.com/STARDUSTLC666/dsh-slack) | 4 | Slack 双向,走 Socket Mode——不需要公网回调。 | — |
+| [dsh-dingtalk](https://github.com/STARDUSTLC666/dsh-dingtalk) | 3 | 钉钉群机器人通知(webhook + 加签,零运行时依赖)。**只出不进**。 | — |
+| [dsh-discord](https://github.com/suuuuuu-1/dsh-discord) | 2 | Discord 远程控制器:私信、提及、Thread,配斜杠命令、审批与附件。 | — |
+| [dsh-dingtalk-channel](https://github.com/ttmouse/dsh-dingtalk-channel) | 0 | 钉钉双向(Stream 模式):每个会话驱动一个 agent,回复经 WebSocket 回流。不需要公网回调。 | MIT |
+| [dsh-wecom](https://github.com/michaelcode-wang/dsh-wecom) | 0 | 企业微信智能机器人桥:aibot WebSocket 双向(bot_id + secret)。不需要公网回调。 | MIT |
+| [dsh-feishu-chat](https://github.com/Qing45/dsh-feishu-chat) | 0 | 基于飞书官方 WebSocket 长连接的双向桥,消息路由到所选工作区的最新会话。 | MIT |
+| [dsh-Remote](https://github.com/Blank-not-black/dsh-Remote) | 8 | 移动远程控制套件:侧边栏入口、Bearer 令牌网关(局域网/Tailscale 自愈)、覆盖会话/审批/提问的 Android App、`/fs/*` 文件端点。 | — |
+| [dsh-web-remote](https://github.com/godchen520/dsh-web-remote) | 4 | 手机访问 dsh:Cloudflare Quick Tunnel 公网链接或局域网 HTTP/HTTPS 直连(自签证书)、token 鉴权、二维码面板。 | — |
+
 ### 访问与移动端
 
 | 插件 | ★ | 作用 | 许可 |

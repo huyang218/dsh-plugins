@@ -68,6 +68,37 @@ Star counts are a snapshot from 2026-08-18.
 | [Aegis](https://github.com/GanyuanRan/Aegis) | 1048 | Software-engineering method pack for coding agents, with skills for baseline-first planning, systematic debugging, prompt hygiene, verification before | — |
 | [MisakaNet](https://github.com/Ikalus1988/MisakaNet) | 404 | Failure-recovery memory: search and record failure-recovery lessons from real engineering sessions, with BM25 + semantic RAG retrieval and a lessons k | — |
 
+### Chat platforms — command the agent from your phone
+
+Every one of these drives an agent turn from a chat app, so a phone is enough
+to give it work and answer its questions. Two properties decide whether one is
+practical for you: whether it needs a **public callback URL** (a long-connection
+or Stream mode does not, which matters when dsh runs on a laptop), and whether
+it reaches WeChat through an **official API or a third-party protocol gateway**.
+Personal WeChat has no official bot API — the plugins that reach it use gateways
+like iLink, against WeChat's terms, at some risk to the account. WeCom, Lark,
+DingTalk and QQ all have official bots.
+
+| Plugin | ★ | What it does | Licence |
+| --- | --: | --- | --- |
+| [dsh-im](https://github.com/xmanrui/dsh-im) | 51 | Nine channels in one plugin — Lark, WeChat, DingTalk, WeCom, QQ, Slack, Telegram, Discord, WhatsApp — paired by QR code or bot credentials. | MIT |
+| [dsh-notifier](https://github.com/THEWOLFWALKER/dsh-notifier) | 40 | One `notify()` API across 25+ channels (Telegram, DingTalk, Lark, WeCom, QQ, Bark, ntfy, webhook …) plus remote control. | MIT |
+| [dsh-lark](https://github.com/omdsh-dev/dsh-lark) | 32 | Lark channel where each chat drives its own agent: approvals, model questions and plan review come back as cards; `/cd`, `/model`, `/new` in chat. | BSD-3-Clause |
+| [dsh-lark-bridge](https://github.com/imetn/dsh-lark-bridge) | 7 | Lark two-way controller with project/session routing, interactive cards, approvals, attachments and task control. | — |
+| [dsh-feishu](https://github.com/xmanrui/dsh-feishu) | 7 | Attaches a Lark bot by scanning a QR code. | — |
+| [dsh-im-bridge](https://github.com/BiBoyang/dsh-im-bridge) | 7 | WeChat two-way bridge over the iLink gateway: turn-complete and approval pushes, in-chat approval, long-reply segmentation. Unofficial protocol. | — |
+| [dsh-feishu-bridge](https://github.com/wz-heng/dsh-feishu-bridge) | 5 | Fail-closed Lark bridge: allowlist denies by default, webhook signature with a time window and replay guard, optional Allow/Deny card before every bash call. Official SDK, pinned. | MIT |
+| [dsh-chatnode-wechat](https://github.com/Jesse-njx/dsh-chatnode-wechat) | 6 | Chat, monitor and approve from WeChat through the iLink gateway. Unofficial protocol. | — |
+| [telegram](https://github.com/LoserFox/telegram) | 6 | Telegram Bot API bridge: long polling, per-chat sessions, HTML formatting. | — |
+| [dsh-slack](https://github.com/STARDUSTLC666/dsh-slack) | 4 | Two-way Slack over Socket Mode — no public callback. | — |
+| [dsh-dingtalk](https://github.com/STARDUSTLC666/dsh-dingtalk) | 3 | DingTalk group-robot notifications (webhook + signature, no runtime dependencies). Outbound only. | — |
+| [dsh-discord](https://github.com/suuuuuu-1/dsh-discord) | 2 | Discord remote controller over DMs, mentions and threads, with slash commands, approvals and attachments. | — |
+| [dsh-dingtalk-channel](https://github.com/ttmouse/dsh-dingtalk-channel) | 0 | Two-way DingTalk over Stream mode: each chat drives an agent, replies flow back over the WebSocket. No public callback. | MIT |
+| [dsh-wecom](https://github.com/michaelcode-wang/dsh-wecom) | 0 | WeCom smart-robot bridge: two-way over the aibot WebSocket with a bot id and secret. No public callback. | MIT |
+| [dsh-feishu-chat](https://github.com/Qing45/dsh-feishu-chat) | 0 | Two-way Lark bridge on the official WebSocket long connection, routed to the newest session of a chosen workspace. | MIT |
+| [dsh-Remote](https://github.com/Blank-not-black/dsh-Remote) | 8 | Mobile remote-control suite: sidebar entry, Bearer-token gateway with LAN/Tailscale self-healing, an Android app covering sessions, approvals and questions, and `/fs/*` file endpoints. | — |
+| [dsh-web-remote](https://github.com/godchen520/dsh-web-remote) | 4 | Reach dsh from a phone: Cloudflare Quick Tunnel link or LAN HTTP/HTTPS direct with a self-signed certificate, token auth, QR panel. | — |
+
 ### Access & mobile
 
 | Plugin | ★ | What it does | Licence |
