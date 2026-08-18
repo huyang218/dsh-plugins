@@ -82,6 +82,7 @@ cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
   - **错误必须分类**(用户明确要求):Tushare 一律返回 HTTP 200、把失败写在 body 里,且积分不足 / 频率超限 / 参数错误**都是 code 40203**。三者处置相反,所以 client 把它们分成 `no-token` / `access-denied` / `rate-limited` / `provider-error` / `transport`,**先判权限再判限流**(权限问题重试只会更慢地失败),并原样透传 Tushare 自己的说明(里面有当前积分门槛)。
   - **权限/token 错误的文案要明确要求模型别自己找补**:真实事故是模型只被告知「数据不可用」,就去解压会话日志、伪造 /tmp 数据文件,最后自信地给出错答案。
 - **ainfo**(`packages/tools/ainfo`):A 股信息面——新闻、券商研报评级、业绩预告、分红、股东增减持、限售解禁、十大股东。与 astock 分开是因为问题域不同(筛选 40 日最低价用不到这些),而每个注册的工具都会在**每次请求**里占系统提示词预算。全部需要 Tushare token 且**无免费替代**。文本字段原样透传不做改写(改写过的标题模型就无法引用了);新闻正文是唯一例外——源数据带 HTML,要剥成纯文本并截断,且必须标明是摘要。
+- **tool-health**(`packages/runtime/tool-health`):监听 `tools/result`(**emit 模式,不是 waterfall**,所以无需也无法改写结果)记录每个工具的调用/失败/连续失败次数与最后一次错误,用 storage 域跨会话持久化,再用 `ctx.systemPrompt.context({ text: fn })`(**text 可以是函数、每次组装求值**)把当前坏掉的工具报给模型。三个判断:按**连续失败**而不是失败率(五十次错一次是健康的,连错三次不是);失败会**过期**(默认 24 小时,否则会教模型躲开其实已恢复的工具);健康时返回空串(常驻「一切正常」横幅是在每次请求上花 token 说废话)。storage 用嵌套 inject,没有存储后端时退化为单会话可用而不是拒绝加载。
 - **gateway-compat**:`llm/stream` waterfall 包装的参考实现——把网关缺失 `[DONE]` 导致的 `STREAM_CLOSED` 终止错误改写为正常 `stop`,但仅在已收到正文且无 tool call 进行中时,真正的中途断流仍然失败并保留重试资格。
 
 ## dsh 插件开发规范(违反会启动崩溃或静默失效)

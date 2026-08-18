@@ -25,6 +25,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A 股数据面:行情、K 线、指标、全市场筛选、财务报表、资金流向、可转债 | 免费,部分工具需 Tushare |
 | [**ainfo**](packages/tools/ainfo) | [`tools`](packages/tools) | A 股信息面:新闻、券商研报、业绩预告、分红、股东增减持、十大股东 | 需 Tushare token |
 | [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | — |
+| [**tool-health**](packages/runtime/tool-health) | [`runtime`](packages/runtime) | 跨会话记住哪些工具在失败,并在下一次会话开始前就告诉模型 | — |
 | [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 | — |
 
 > [!NOTE]

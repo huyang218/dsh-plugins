@@ -1,0 +1,43 @@
+{
+  "name": "dsh-plugin-tool-health",
+  "version": "0.1.0",
+  "description": "Remembers which DeepSeek Harness tools have been failing, across sessions, and tells the next session — so an agent stops rediscovering a dead endpoint one failed call at a time.",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "observability",
+    "reliability",
+    "memory"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huyang218/dsh-plugins.git",
+    "directory": "packages/runtime/tool-health"
+  },
+  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/runtime/tool-health#readme",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test 'test/*.test.js'"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "category": "runtime/observability"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "zod": "^4.0.0"
+  }
+}

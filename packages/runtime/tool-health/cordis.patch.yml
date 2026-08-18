@@ -1,0 +1,4 @@
+# dsh-plugin-tool-health bundle layer: observes tool results, remembers failures.
+- insert:
+    - id: tool-health
+      name: dsh-plugin-tool-health

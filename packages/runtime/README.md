@@ -12,6 +12,7 @@ model's behaviour changes because the machinery around it changed.
 | Plugin | Shape | What it does |
 | --- | --- | --- |
 | [**gateway-compat**](gateway-compat) | `llm/stream` listener | Tolerates OpenAI-style gateways whose SSE stream ends without the `[DONE]` sentinel |
+| [**tool-health**](tool-health) | `tools/result` observer | Remembers which tools have been failing across sessions and warns the next one |
 | [**tushare**](tushare) | `tushare` service | Shared Tushare Pro access for the finance plugins: one token, one quota gate, one calendar, and typed failures |
 
 Two shapes live here, and both are invisible to the model: **waterfall
