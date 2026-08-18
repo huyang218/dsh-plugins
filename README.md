@@ -29,6 +29,7 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 | [**tushare**](packages/tushare) | [`runtime`](docs/authoring-runtime.md) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
 | [**tool-health**](packages/tool-health) | [`runtime`](docs/authoring-runtime.md) | Remembers which tools have been failing, across sessions, and tells the next session before it starts work | — |
 | [**tool-usage**](packages/tool-usage) | [`runtime`](docs/authoring-runtime.md) | Measures what a session spends on tools — calls, duration percentiles, failures — with an optional budget warning | — |
+| [**tool-retry**](packages/tool-retry) | [`runtime`](docs/authoring-runtime.md) | Retries transient tool failures — socket resets, rate limits, timeouts — for the tools an operator declares safe to repeat | — |
 | [**gateway-compat**](packages/gateway-compat) | [`runtime`](docs/authoring-runtime.md) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel | — |
 
 > [!NOTE]

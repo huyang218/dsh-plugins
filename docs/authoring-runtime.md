@@ -13,6 +13,7 @@ model's behaviour changes because the machinery around it changed.
 | --- | --- | --- |
 | [**gateway-compat**](../packages/gateway-compat) | `llm/stream` listener | Tolerates OpenAI-style gateways whose SSE stream ends without the `[DONE]` sentinel |
 | [**tool-health**](../packages/tool-health) | `tools/result` observer | Remembers which tools have been failing across sessions and warns the next one |
+| [**tool-retry**](../packages/tool-retry) | `tools/execute` wrapper | Retries transient failures of tools an operator declared repeatable |
 | [**tool-usage**](../packages/tool-usage) | `tools/execute` wrapper | Measures calls, duration percentiles and failures per tool; exposes the `toolUsage` service |
 | [**tushare**](../packages/tushare) | `tushare` service | Shared Tushare Pro access for the finance plugins: one token, one quota gate, one calendar, and typed failures |
 

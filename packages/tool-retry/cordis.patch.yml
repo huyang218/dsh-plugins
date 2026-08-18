@@ -1,0 +1,4 @@
+# dsh-plugin-tool-retry bundle layer: retries transient failures of declared tools.
+- insert:
+    - id: tool-retry
+      name: dsh-plugin-tool-retry
