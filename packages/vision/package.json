@@ -1,0 +1,51 @@
+{
+  "name": "dsh-plugin-vision",
+  "version": "0.1.0",
+  "description": "Lets a text-only agent call a multimodal model mid-task: the vision tool sends one image file to any OpenAI-compatible vision endpoint and returns structured evidence — summary, verbatim OCR, layout, entities, and what the model could not determine.",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "vision",
+    "vlm",
+    "ocr",
+    "image-understanding",
+    "multimodal"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huyang218/dsh-plugins.git",
+    "directory": "packages/vision"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "category": "tools/vision",
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  }
+}

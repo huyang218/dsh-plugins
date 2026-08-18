@@ -30,6 +30,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | `ui/…` | 用户 | Web 客户端扩展——结果卡片、键盘操作界面 | [ui 指南](docs/authoring-ui.md) |
 
 分类的后半截是领域:`tools/finance` 与 `ui/finance` 是 A 股的数据面、信息面与持仓;
+`tools/vision` 让纯文本模型能借助多模态模型看图;
 `runtime/provider`、`runtime/observability`、`runtime/reliability`、`runtime/llm`
 是共享凭证、度量、重试与网关兼容;`ui/productivity` 是 Web 客户端本身的操作效率。
 
@@ -40,6 +41,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | 插件 | 做什么 | 包名 |
 | --- | --- | --- |
 | [astock](packages/astock) | A 股行情、K 线、技术指标、全市场筛选、财报、资金流、可转债——免费,少数工具需 Tushare token | `dsh-plugin-astock` |
+| [vision](packages/vision) | 让纯文本 agent 中途调用多模态模型:把图片发给 OpenAI 兼容视觉端点,返回结构化证据——需要一个端点,不需要 key | `dsh-plugin-vision` |
 | [ainfo](packages/ainfo) | A 股新闻、券商研报、业绩预告、分红、股东增减持、十大股东——需 Tushare token | `dsh-plugin-ainfo` |
 | [aportfolio](packages/aportfolio) | 跨会话记住持仓与自选,实时估值,给出盈亏、占比与目标价触发 | `dsh-plugin-aportfolio` |
 

@@ -30,7 +30,8 @@ extends decides where it can be seen from:
 | `ui/…` | the person | web client extensions — result cards, keyboard-driven surfaces | [authoring ui](docs/authoring-ui.md) |
 
 The second half of the category is the domain: `tools/finance` and `ui/finance`
-cover A-share market data, information feeds and portfolio state;
+cover A-share market data, information feeds and portfolio state; `tools/vision`
+reaches a multimodal model on behalf of a text-only one;
 `runtime/provider`, `runtime/observability`, `runtime/reliability` and
 `runtime/llm` cover shared credentials, measurement, retries and gateway
 compatibility; `ui/productivity` covers the web client's own ergonomics.
@@ -42,6 +43,7 @@ compatibility; `ui/productivity` covers the web client's own ergonomics.
 | Plugin | What it does | Package |
 | --- | --- | --- |
 | [astock](packages/astock) | A-share quotes, K-lines, indicators, whole-market screening, financials, money flow, convertible bonds — free, a few tools need a Tushare token | `dsh-plugin-astock` |
+| [vision](packages/vision) | Lets a text-only agent call a multimodal model mid-task: one image file to an OpenAI-compatible vision endpoint, back as structured evidence — needs an endpoint, not a key | `dsh-plugin-vision` |
 | [ainfo](packages/ainfo) | A-share news, broker research, earnings pre-announcements, dividends, insider trades, shareholders — needs a Tushare token | `dsh-plugin-ainfo` |
 | [aportfolio](packages/aportfolio) | Holdings and watchlist that survive the session, priced live, with profit, weights and target hits | `dsh-plugin-aportfolio` |
 
