@@ -779,6 +779,7 @@ function registerMarketQuotesTool(ctx, config) {
     timeoutMs: 120000,
     isConcurrencySafe: () => true,
     async execute(_args, exec) {
+      requireCodeDispatch(exec, 'astock_market_quotes');
       const { rows, delayed } = await fetchMarketQuotes({
         pageSize: config.marketPageSize ?? 100,
         pauseMs: config.marketPauseMs ?? 120,
@@ -810,6 +811,32 @@ const CODE_MODE_ONLY = '⚠️ 本结果的数据只存在于规范值中,只能
   + '(`const res = await tools.<name>(args)`)。如果你不是在 run_code 里调用的,'
   + '就拿不到这些数据:请改用 run_code 重新调用本工具。不要根据本摘要猜测答案,'
   + '也不要从会话日志、临时文件或其他渠道自行拼凑数据——拿不到就直接说明,不要给出编造的结论。';
+
+/**
+ * Refuse a call that cannot reach this tool's answer.
+ *
+ * These two tools carry a whole-market dataset in the canonical value and
+ * render only a summary, so a MODEL-DIRECT call receives the shape of an
+ * answer and none of the data. `exec.parent` is set only on `run_code`
+ * sub-dispatches, which makes the difference detectable — and worth
+ * detecting: the silent version of this produced a confidently wrong screen
+ * once already, where the agent, told only that data was unavailable,
+ * assembled numbers from elsewhere. Failing loudly converts that into an
+ * error the model can act on.
+ * @param {Object} exec - The tool execution
+ * @param {string} toolName - Tool being called
+ * @throws {Error} When called directly by the model
+ */
+function requireCodeDispatch(exec, toolName) {
+  if (exec?.parent !== undefined) return;
+  throw new Error(
+    `${toolName} 只能在 run_code 程序里调用:它的答案是整个市场的数据集,存在规范值里,`
+    + '而直接调用只能拿到摘要文本。请改用 run_code,在程序里 '
+    + `\`const res = await tools.${toolName}(args)\` 并在 JS 里做筛选。`
+    + '如果当前无法使用 run_code(呈现模式为 native),请如实告诉用户该功能需要 code 或 both 模式,'
+    + '不要根据摘要猜测答案,也不要改用其他来源拼凑数据。',
+  );
+}
 
 /** Model-facing summary: the rows themselves belong to the canonical value. */
 function formatMarketQuotesOutput(value) {
@@ -911,6 +938,7 @@ function registerMarketBarsTool(ctx, config, tushare) {
     timeoutMs: 300000,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
+      requireCodeDispatch(exec, 'astock_market_bars');
       const maxDays = config.marketMaxDays ?? 120;
       const days = Math.max(1, Math.min(Math.floor(args.days ?? 40), maxDays));
       const shared = { signal: exec.signal, query: tushare.query };

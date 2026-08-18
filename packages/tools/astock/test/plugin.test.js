@@ -49,6 +49,12 @@ function fakeTushare(handlers = {}, tradeDates = []) {
   }
 }
 
+/**
+ * A run_code sub-dispatch. The whole-market tools refuse a model-direct call,
+ * so a test that omits this exercises a route the real model cannot take.
+ */
+const CODE_DISPATCH = { signal: undefined, parent: 'outer-call-token' }
+
 test('exports the named plugin surface and no default export', () => {
   assert.ok(!('default' in plugin), 'default export would make the Loader drop name/inject')
   // Upstream convention: the exported name is the SHORT plugin name (loader
@@ -121,7 +127,7 @@ test('astock_market_bars registers only with a token and clamps the window', asy
   assert.ok(tool)
   {
     // 999 days requested, but marketMaxDays caps the window at 5.
-    const value = await tool.execute({ endDate: '20260803', days: 999 }, { signal: undefined })
+    const value = await tool.execute({ endDate: '20260803', days: 999 }, CODE_DISPATCH)
     assert.equal(value.tradeDates.length, 5)
     assert.equal(requested.length, 5, 'one request per trading day, not per stock')
     assert.equal(value.count, 5)
@@ -169,7 +175,7 @@ test('astock_market_bars packs absent metrics as empty tokens, never as 0', asyn
     }))
   }
   try {
-    const value = await tool.execute({ endDate: '20260803', days: 1 }, { signal: undefined })
+    const value = await tool.execute({ endDate: '20260803', days: 1 }, CODE_DISPATCH)
     assert.equal(value.rows[0], '0,11.5,11.7,11.44,11.62,,,10,20')
     const [, , , , , preClose, pctChg] = value.rows[0]
       .split(',')
@@ -208,15 +214,15 @@ test('astock_market_bars serves a repeated window from the closed-day cache', as
   plugin.apply(ctx, new plugin.Config())
   const tool = ctx._tools.find(t2 => t2.name === 'astock_market_bars')
 
-  const first = await tool.execute({ endDate: '20260803', days: 4 }, { signal: undefined })
+  const first = await tool.execute({ endDate: '20260803', days: 4 }, CODE_DISPATCH)
   assert.equal(requested.length, 4)
-  const second = await tool.execute({ endDate: '20260803', days: 4 }, { signal: undefined })
+  const second = await tool.execute({ endDate: '20260803', days: 4 }, CODE_DISPATCH)
   assert.equal(requested.length, 4, 'closed days never need a second request')
   assert.deepEqual(second, first, 'the cached window rebuilds the same value')
 
   // A narrower window reuses the same days at their NEW indices: di indexes
   // this call's tradeDates, so a cached row must not carry a stale one.
-  const narrow = await tool.execute({ endDate: '20260803', days: 2 }, { signal: undefined })
+  const narrow = await tool.execute({ endDate: '20260803', days: 2 }, CODE_DISPATCH)
   assert.equal(requested.length, 4, 'still no new requests')
   assert.deepEqual(narrow.tradeDates, ['20260802', '20260803'])
   assert.deepEqual(
@@ -235,8 +241,8 @@ test('astock_market_bars refetches the current day instead of caching it', async
   plugin.apply(ctx, new plugin.Config())
   const tool = ctx._tools.find(t2 => t2.name === 'astock_market_bars')
 
-  await tool.execute({ endDate: today, days: 1 }, { signal: undefined })
-  await tool.execute({ endDate: today, days: 1 }, { signal: undefined })
+  await tool.execute({ endDate: today, days: 1 }, CODE_DISPATCH)
+  await tool.execute({ endDate: today, days: 1 }, CODE_DISPATCH)
   assert.deepEqual(requested, [today, today])
 })
 
@@ -258,7 +264,7 @@ test('astock_market_bars refuses an over-budget window after one probe request',
 
   {
     await assert.rejects(
-      tool.execute({ endDate: '20260803', days: 4 }, { signal: undefined }),
+      tool.execute({ endDate: '20260803', days: 4 }, CODE_DISPATCH),
       /窗口过大.*days 降到 2/s,
     )
     assert.deepEqual(requested, ['20260803'], 'refuse after the probe, not after the window')
@@ -442,5 +448,27 @@ test('every tool forwards exec.signal to its request', async (t) => {
     await ctx._tools.find(t2 => t2.name === name).execute(args, { signal }).catch(() => {})
     assert.ok(seen.length > 0, `${name} made no request`)
     assert.ok(seen.every(s => s === signal), `${name} must pass exec.signal to fetch`)
+  }
+})
+
+test('the whole-market tools refuse a model-direct call instead of answering uselessly', async () => {
+  // Under `both` presentation the model CAN call these natively, and would get
+  // the summary with none of the data — the exact shape of the wrong screen
+  // this repo already shipped once. `exec.parent` is set only on run_code
+  // sub-dispatches, which makes the difference detectable.
+  const ctx = fakeCtx({ tushare: fakeTushare({}, ['20260814']) })
+  plugin.apply(ctx, new plugin.Config())
+
+  for (const name of ['astock_market_quotes', 'astock_market_bars']) {
+    const tool = ctx._tools.find(t => t.name === name)
+    await assert.rejects(
+      () => tool.execute({ endDate: '20260814', days: 5 }, { signal: undefined }),
+      error => {
+        assert.match(error.message, /run_code/, 'the message must name the route back')
+        assert.match(error.message, /不要根据摘要猜测|不要改用其他来源/, 'and forbid improvising')
+        return true
+      },
+      `${name} must refuse a model-direct call`,
+    )
   }
 })
