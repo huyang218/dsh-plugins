@@ -1,0 +1,4 @@
+# dsh-plugin-ainfo bundle layer: mounts the A-share information tools.
+- insert:
+    - id: ainfo
+      name: dsh-plugin-ainfo

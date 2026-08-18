@@ -9,8 +9,8 @@ DeepSeek Harness(dsh)的插件 monorepo,**面向开源发布**(MIT)。dsh 是"�
 目录按**扩展形态**分层——决定插件怎么写、怎么审的是这个维度,不是业务场景:
 
 ```
-packages/tools/      模型可调用的能力(注册工具,对模型可见)     astock
-packages/runtime/    改变 harness 行为(挂 waterfall,对模型不可见)  gateway-compat
+packages/tools/      模型可调用的能力(注册工具,对模型可见)     astock(数据面)、ainfo(信息面)
+packages/runtime/    对模型不可见的东西:waterfall 包装与共享服务  gateway-compat、tushare(provider)
 packages/ui/         Web 客户端扩展(暂空)
 ```
 
@@ -74,7 +74,14 @@ cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
   - **大结果必须打包(踩过,会崩服务)**:Code Mode 的每次 `run_code` 跑在一个 `maxOldGenerationSizeMb: 512` 的 worker 里,绑定返回值跨 port 时会被逐个数组 `Reflect.ownKeys` 校验并**整体重建一份脱附副本**。667k 个 bar 对象(全市场 × 120 天)光重建就 313MB,直接把整个 dsh 服务 OOM abort 掉(`signal=SIGABRT`)。所以 `astock_market_bars` 的规范值是 `{ tradeDates, codes, fields, count, rows }`——`rows[i]` 把 `codes[i]` 的全部 K 线打包成一个字符串(`;` 分隔,每根为 `di,open,high,…`,`di` 是 `tradeDates` 下标)。字符串是共享引用,脱附几乎免费:同样 667k 根,常驻 32MB、跨界后 62MB。新增批量工具照此办理,并配 `marketMaxBars` 这类预算,超了**在探测请求后就报错**要求收窄窗口,别等整窗抓完。
   - **东方财富的可用性是按端点的**(踩过):2026-08 起 `push2.eastmoney.com/api/qt/clist/get`(全市场列表)**直接关连接**——不是 HTTP 状态码,是 socket 被关,undici 报 `fetch failed / UND_ERR_SOCKET`;而同一主机的 `/api/qt/stock/get`(单只)正常,`1.push2`、`82.push2`、`push2his` 的 clist 同样不可用,只有 `push2delay.eastmoney.com` 还服务(延时行情,字段与 total 完全一致)。所以全市场列表走**主机回退链**(`MARKET_HOSTS`,首个有数据的赢),并把 `delayed` 放进规范值和摘要——降级到延时数据必须让模型看得见。第一页为空视为「该主机不服务」而非空市场:静默返回 0 只会让筛选给出「无匹配」这种错误答案,而不是可见的失败。
   - **Tushare 配额按接口计**(踩过):`daily` 是 500 次/分钟,而一次全市场窗口 = 每个交易日一次请求,所以 120 天的调用重复三四次就会中途报「频率超限」把整个工具call 打挂。三层应对:`createRateLimiter`(按 apiName 的滑动窗口,配额内排队而不是失败)、`tushareQuery` 对配额报错重试退避(token 可能被别处共用)、以及**收盘日缓存**——已收盘交易日的日线永不变化,重复窗口零请求(实测 120 天冷取 1.4s/120 请求,热取 0.15s/0 请求)。缓存容量必须 ≥ 窗口天数,否则 LRU 自我淘汰、命中率为 0。
-  - 缺失值铁律:东方财富用 `'-'`、Tushare 用 `null` 表示缺失,而 `Number(null) === 0`——一律走 `lib/value.js` 的 `finiteNumber` / `assignFinite`,缺失字段**整个键省略**,绝不写成 0 或 NaN(闭合 schema 下 NaN 会让整次调用变成 isError)。
+  - **凭证要事先声明,不能靠失败发现**(用户明确要求):`astock:data-sources` section **无条件注册**(即使 provider 没装),说明哪些工具免费、哪些要 token、工具缺席或报权限错时该怎么办;每个 Tushare 工具的 description 再用 `tokenNote()` 重复一遍,并写明免费替代(如 astock_fundamentals ↔ astock_quote)。目的是让模型**调用前**就能判断走哪条路。
+  - Tushare 工具走**嵌套 `ctx.inject(['tushare'], ...)`**,不是顶层 inject:顶层声明会让没装 provider 的用户连免费的东财工具都用不上。
+  - 缺失值铁律:东方财富用 `'-'`、Tushare 用 `null` 表示缺失,而 `Number(null) === 0`——一律走 `lib/value.js` 的 `finiteNumber` / `assignFinite`(provider 也导出同名助手供其他包用),缺失字段**整个键省略**,绝不写成 0 或 NaN(闭合 schema 下 NaN 会让整次调用变成 isError)。
+  - 可转债代码按**前两位**分交易所(11x=沪、12x=深),套用股票的首位映射会把所有深市转债发到上交所(踩过);`moneyflow_hsgt` 不接受 `limit`,只能按日期区间取(踩过)。
+- **tushare**(provider,`packages/runtime/tushare`):金融插件共用的 Tushare Pro 接入,`ctx.provide('tushare', ...)` 暴露 `query` / `tradeDates` / `access` / `configured`。**凭证只配一次**,配额闸也只有一个——Tushare 按账号计量,四个插件各自限流仍会超。
+  - **错误必须分类**(用户明确要求):Tushare 一律返回 HTTP 200、把失败写在 body 里,且积分不足 / 频率超限 / 参数错误**都是 code 40203**。三者处置相反,所以 client 把它们分成 `no-token` / `access-denied` / `rate-limited` / `provider-error` / `transport`,**先判权限再判限流**(权限问题重试只会更慢地失败),并原样透传 Tushare 自己的说明(里面有当前积分门槛)。
+  - **权限/token 错误的文案要明确要求模型别自己找补**:真实事故是模型只被告知「数据不可用」,就去解压会话日志、伪造 /tmp 数据文件,最后自信地给出错答案。
+- **ainfo**(`packages/tools/ainfo`):A 股信息面——新闻、券商研报评级、业绩预告、分红、股东增减持、限售解禁、十大股东。与 astock 分开是因为问题域不同(筛选 40 日最低价用不到这些),而每个注册的工具都会在**每次请求**里占系统提示词预算。全部需要 Tushare token 且**无免费替代**。文本字段原样透传不做改写(改写过的标题模型就无法引用了);新闻正文是唯一例外——源数据带 HTML,要剥成纯文本并截断,且必须标明是摘要。
 - **gateway-compat**:`llm/stream` waterfall 包装的参考实现——把网关缺失 `[DONE]` 导致的 `STREAM_CLOSED` 终止错误改写为正常 `stop`,但仅在已收到正文且无 tool call 进行中时,真正的中途断流仍然失败并保留重试资格。
 
 ## dsh 插件开发规范(违反会启动崩溃或静默失效)

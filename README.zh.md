@@ -10,10 +10,16 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 
 ## 插件
 
-| 插件 | 分组 | 作用 |
-| --- | --- | --- |
-| [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A 股行情数据:实时行情、K 线、技术指标,以及一次调用扫完全市场的批量筛选工具 |
-| [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 |
+| 插件 | 分组 | 作用 | 凭证 |
+| --- | --- | --- | --- |
+| [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A 股数据面:行情、K 线、指标、全市场筛选、财务报表、资金流向、可转债 | 免费,部分工具需 Tushare |
+| [**ainfo**](packages/tools/ainfo) | [`tools`](packages/tools) | A 股信息面:新闻、券商研报、业绩预告、分红、股东增减持、十大股东 | 需 Tushare token |
+| [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | — |
+| [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 | — |
+
+金融插件通过 `tushare` provider 共用一份凭证,而不是各自向用户要同一个 token;
+每个需要凭证的工具都在自己的描述里写明——这样模型能在有免费替代时选免费的,
+在没有时如实告诉用户缺什么。
 
 分组(每个分组都有自己的 README,写清该形态特有的约定和坑):
 

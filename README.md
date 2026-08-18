@@ -11,10 +11,17 @@ edit it.
 
 ## Plugins
 
-| Plugin | Group | What it does |
-| --- | --- | --- |
-| [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A-share market data: quotes, K-lines, technical indicators, and whole-market batch tools that screen thousands of stocks in one call |
-| [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel |
+| Plugin | Group | What it does | Credentials |
+| --- | --- | --- | --- |
+| [**astock**](packages/tools/astock) | [`tools`](packages/tools) | A-share market data: quotes, K-lines, indicators, whole-market screening, financial statements, money flow, convertible bonds | free, plus Tushare-only tools |
+| [**ainfo**](packages/tools/ainfo) | [`tools`](packages/tools) | A-share information: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token |
+| [**tushare**](packages/runtime/tushare) | [`runtime`](packages/runtime) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
+| [**gateway-compat**](packages/runtime/gateway-compat) | [`runtime`](packages/runtime) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel | — |
+
+Finance plugins share one credential through the `tushare` provider rather than
+each asking for the same token, and every tool that needs it says so in its own
+description — so the model can choose a free tool when one will do, and tell
+you exactly what is missing when one will not.
 
 Groups — each with its own README of conventions and pitfalls:
 
