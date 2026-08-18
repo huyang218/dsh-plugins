@@ -20,21 +20,23 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 
 ## 插件
 
-| 插件 | 分组 | 作用 | 凭证 |
-| --- | --- | --- | --- |
-| [**astock**](packages/astock) | [`tools`](docs/authoring-tools.md) | A 股数据面:行情、K 线、指标、全市场筛选、财务报表、资金流向、可转债 | 免费,部分工具需 Tushare |
-| [**ainfo**](packages/ainfo) | [`tools`](docs/authoring-tools.md) | A 股信息面:新闻、券商研报、业绩预告、分红、股东增减持、十大股东 | 需 Tushare token |
-| [**aportfolio**](packages/aportfolio) | [`tools`](docs/authoring-tools.md) | 跨会话记住你的持仓与自选,实时取价,给出盈亏、占比与目标价触发 | — |
-| [**astock-chart**](packages/astock-chart) | [`ui`](docs/authoring-ui.md) | 把 `astock_data` 的结果直接画成带成交量的 K 线图,就在回复里 | — |
-| [**shortcuts**](packages/shortcuts) | [`ui`](docs/authoring-ui.md) | Web 客户端键盘快捷键——会话/视图/剪贴板/模型/权限共 34 个功能,绑定可自行录制 | — |
-| [**tushare**](packages/tushare) | [`runtime`](docs/authoring-runtime.md) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | — |
-| [**tool-health**](packages/tool-health) | [`runtime`](docs/authoring-runtime.md) | 跨会话记住哪些工具在失败,并在下一次会话开始前就告诉模型 | — |
-| [**tool-usage**](packages/tool-usage) | [`runtime`](docs/authoring-runtime.md) | 计量一次会话在工具上的花费:调用次数、耗时分位数、失败率,并可设预算提醒 | — |
-| [**tool-retry**](packages/tool-retry) | [`runtime`](docs/authoring-runtime.md) | 对可自行恢复的工具失败做重试(socket 重置、限流、超时),只针对声明为可安全重复的工具 | — |
-| [**gateway-compat**](packages/gateway-compat) | [`runtime`](docs/authoring-runtime.md) | OpenAI 式网关的 SSE 流缺少 `[DONE]` 结束标记时,不让一次已经完整的回复被判为失败 | — |
+三种形态,由各自 `package.json` 的 `dsh.category` 区分——一个插件扩展的是什么,
+决定了它从哪里能被看见:
 
-**想找本仓库没有的插件?** [CATALOG.zh.md](CATALOG.zh.md) 按分类列出了由他人维护的
-插件,以及每个插件做什么。
+| 分组 | 谁能看见 | 扩展什么 | 指南 |
+| --- | --- | --- | --- |
+| `tools/…` | 模型 | 模型可调用的能力,会写进系统提示词 | [tools 指南](docs/authoring-tools.md) |
+| `runtime/…` | 都看不见 | 围绕 harness 自身的 waterfall 包装与共享服务 | [runtime 指南](docs/authoring-runtime.md) |
+| `ui/…` | 用户 | Web 客户端扩展——结果卡片、键盘操作界面 | [ui 指南](docs/authoring-ui.md) |
+
+分类的后半截是领域:`tools/finance` 与 `ui/finance` 是 A 股的数据面、信息面与持仓;
+`runtime/provider`、`runtime/observability`、`runtime/reliability`、`runtime/llm`
+是共享凭证、度量、重试与网关兼容;`ui/productivity` 是 Web 客户端本身的操作效率。
+
+**插件列表见 [`packages/`](packages)**——每个插件自己的中英文 README 才是它做什么、
+需要什么代价的准确说明。
+
+**想找本仓库没有的插件?** [CATALOG.zh.md](CATALOG.zh.md) 按分类列出了由他人维护的插件。
 
 > [!NOTE]
 > 金融插件通过 `tushare` provider 共用一份凭证,而不是各自向用户要同一个 token。

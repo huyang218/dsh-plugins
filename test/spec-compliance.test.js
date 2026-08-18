@@ -180,3 +180,16 @@ test('a tool whose summary hides rows says so', async () => {
     }
   }
 })
+
+test('both root READMEs account for every category in use', () => {
+  // The root README describes the categories rather than listing the
+  // plugins, so nothing about it changes when a package is added — which is
+  // exactly how it stops being true. A new domain has to be written into the
+  // description, in both languages, or it is invisible to a reader.
+  const categories = [...new Set(all.map(({ pkg }) => pkg.dsh?.category))].sort()
+  for (const file of ['README.md', 'README.zh.md']) {
+    const text = readFileSync(file, 'utf8')
+    const missing = categories.filter(category => !text.includes(category))
+    assert.deepEqual(missing, [], `${file} never mentions: ${missing.join(', ')}`)
+  }
+})

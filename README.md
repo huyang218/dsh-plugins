@@ -20,21 +20,27 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 
 ## Plugins
 
-| Plugin | Group | What it does | Credentials |
+Three kinds, told apart by `dsh.category` in each package — what a plugin
+extends decides where it can be seen from:
+
+| Group | Visible to | What it extends | Guide |
 | --- | --- | --- | --- |
-| [**astock**](packages/astock) | [`tools`](docs/authoring-tools.md) | A-share market data: quotes, K-lines, indicators, whole-market screening, financial statements, money flow, convertible bonds | free, plus Tushare-only tools |
-| [**ainfo**](packages/ainfo) | [`tools`](docs/authoring-tools.md) | A-share information: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token |
-| [**aportfolio**](packages/aportfolio) | [`tools`](docs/authoring-tools.md) | Remembers your holdings and watchlist across sessions, prices them live, and reports profit, weights and target hits | — |
-| [**astock-chart**](packages/astock-chart) | [`ui`](docs/authoring-ui.md) | Renders `astock_data` results as a candlestick chart with volume, inside the reply | — |
-| [**shortcuts**](packages/shortcuts) | [`ui`](docs/authoring-ui.md) | Keyboard shortcuts for the web client — 34 features across session, view, clipboard, model and permission, with recordable bindings | — |
-| [**tushare**](packages/tushare) | [`runtime`](docs/authoring-runtime.md) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
-| [**tool-health**](packages/tool-health) | [`runtime`](docs/authoring-runtime.md) | Remembers which tools have been failing, across sessions, and tells the next session before it starts work | — |
-| [**tool-usage**](packages/tool-usage) | [`runtime`](docs/authoring-runtime.md) | Measures what a session spends on tools — calls, duration percentiles, failures — with an optional budget warning | — |
-| [**tool-retry**](packages/tool-retry) | [`runtime`](docs/authoring-runtime.md) | Retries transient tool failures — socket resets, rate limits, timeouts — for the tools an operator declares safe to repeat | — |
-| [**gateway-compat**](packages/gateway-compat) | [`runtime`](docs/authoring-runtime.md) | Keeps a completed reply from failing when an OpenAI-style gateway ends its SSE stream without the `[DONE]` sentinel | — |
+| `tools/…` | the model | capabilities it can call, described in the system prompt | [authoring tools](docs/authoring-tools.md) |
+| `runtime/…` | nobody | waterfall wrappers and shared services around the harness itself | [authoring runtime](docs/authoring-runtime.md) |
+| `ui/…` | the person | web client extensions — result cards, keyboard-driven surfaces | [authoring ui](docs/authoring-ui.md) |
+
+The second half of the category is the domain: `tools/finance` and `ui/finance`
+cover A-share market data, information feeds and portfolio state;
+`runtime/provider`, `runtime/observability`, `runtime/reliability` and
+`runtime/llm` cover shared credentials, measurement, retries and gateway
+compatibility; `ui/productivity` covers the web client's own ergonomics.
+
+**Browse [`packages/`](packages)** for the current set — each plugin's own
+README, in English and 中文, is the accurate description of what it does and
+what it costs to run.
 
 **Looking for something this repo does not ship?** [CATALOG.md](CATALOG.md)
-lists plugins maintained elsewhere, by category, with what each one does.
+lists plugins maintained elsewhere, by category.
 
 > [!NOTE]
 > Finance plugins share one credential through the `tushare` provider rather
