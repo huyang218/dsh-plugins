@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-astock",
   "version": "0.1.0",
-  "description": "A-share (Chinese stock market) data plugin for DeepSeek Harness. Fetch K-line data (daily, weekly, monthly, hourly) and calculate standard technical indicators (MA, MACD, RSI, KDJ, BOLL, etc.).",
+  "description": "A-share (Chinese stock market) data plugin for DeepSeek Harness: 10 tools covering quotes, K-lines and technical indicators for one stock, whole-market snapshots and daily bars for screening, plus financial statements, money flow and convertible bonds. Five tools work with no credentials; the rest need a Tushare Pro token through dsh-plugin-tushare.",
   "license": "MIT",
   "keywords": [
     "dsh",
