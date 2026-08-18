@@ -24,6 +24,7 @@ it runs from npm, from git, or straight from a checkout while you edit it.
 | --- | --- | --- | --- |
 | [**astock**](packages/astock) | [`tools`](docs/authoring-tools.md) | A-share market data: quotes, K-lines, indicators, whole-market screening, financial statements, money flow, convertible bonds | free, plus Tushare-only tools |
 | [**ainfo**](packages/ainfo) | [`tools`](docs/authoring-tools.md) | A-share information: news, broker research, earnings pre-announcements, dividends, insider trades, shareholders | Tushare token |
+| [**aportfolio**](packages/aportfolio) | [`tools`](docs/authoring-tools.md) | Remembers your holdings and watchlist across sessions, prices them live, and reports profit, weights and target hits | — |
 | [**astock-chart**](packages/astock-chart) | [`ui`](docs/authoring-ui.md) | Renders `astock_data` results as a candlestick chart with volume, inside the reply | — |
 | [**tushare**](packages/tushare) | [`runtime`](docs/authoring-runtime.md) | Shared Tushare Pro access: one token, one quota gate, one calendar, and failures an agent can act on | — |
 | [**tool-health**](packages/tool-health) | [`runtime`](docs/authoring-runtime.md) | Remembers which tools have been failing, across sessions, and tells the next session before it starts work | — |

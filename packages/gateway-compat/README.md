@@ -1,5 +1,7 @@
 # dsh-plugin-gateway-compat
 
+English | [中文](README.zh.md)
+
 Compatibility shim for third-party OpenAI-style gateways used with
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 

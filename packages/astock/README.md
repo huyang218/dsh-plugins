@@ -1,5 +1,7 @@
 # dsh-plugin-astock
 
+English | [中文](README.zh.md)
+
 A-share (Chinese stock market) data tools for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
 Quotes, K-lines and technical indicators for a single stock, plus **whole-market

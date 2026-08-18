@@ -1,5 +1,7 @@
 # dsh-plugin-astock-chart
 
+English | [中文](README.zh.md)
+
 Draws the candlesticks in the reply. An `astock_data` result renders as an OHLC
 chart with a volume band instead of a table of numbers.
 

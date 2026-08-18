@@ -27,6 +27,7 @@
     "lib",
     "client",
     "cordis.patch.yml",
+    "README.zh.md",
     "LICENSE"
   ],
   "exports": {

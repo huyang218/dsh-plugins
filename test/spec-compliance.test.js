@@ -69,7 +69,18 @@ for (const { group, dir, pkg } of all) {
     assert.match(String(pkg.dsh?.category ?? ''), /^(tools|runtime|ui)\/[a-z-]+$/,
       'dsh.category carries the grouping now that the directories do not')
     assert.equal(pkg.repository?.directory, dir, 'repository.directory points at this package')
-    assert.ok(existsSync(join(dir, 'README.md')), 'a package README is its npm page')
+    // Both languages, each pointing at the other: the npm page is English and
+    // most of this repo's users read Chinese, so one of the two would always
+    // be the wrong one to ship alone.
+    for (const file of ['README.md', 'README.zh.md']) {
+      assert.ok(existsSync(join(dir, file)), `${file} is missing`)
+    }
+    assert.match(readFileSync(join(dir, 'README.md'), 'utf8'), /\[中文\]\(README\.zh\.md\)/,
+      'README.md must link to the Chinese one')
+    assert.match(readFileSync(join(dir, 'README.zh.md'), 'utf8'), /\[English\]\(README\.md\)/,
+      'README.zh.md must link back')
+    assert.ok(pkg.files.includes('README.zh.md'),
+      'npm ships README.md automatically but not the translation')
 
     // ── no dead imports: under symlink loading a stale one is a startup crash ──
     for (const match of source.matchAll(/^import \{([^}]+)\} from '[^']+';?$/gm)) {
@@ -133,12 +144,27 @@ test('a tool whose summary hides rows says so', async () => {
   for (const { dir, pkg } of all.filter(p => p.group === 'tools')) {
     const module_ = await import(new URL(`../${join(dir, pkg.main)}`, import.meta.url).href)
     const registered = []
-    const service = { configured: true, access: () => 'points', query: async () => [], tradeDates: async () => ['20260814'] }
+    // Stand-ins for whatever a plugin may inject. `inject` mirrors Cordis by
+    // running the body only when every named service is available — calling it
+    // regardless would hand the plugin an undefined service and fail here for
+    // a reason that has nothing to do with the rule under test.
+    const services = {
+      tushare: { configured: true, access: () => 'points', query: async () => [], tradeDates: async () => ['20260814'] },
+      storageDomain: {
+        open: async () => ({
+          table: () => ({ get: () => undefined, entries: () => [][Symbol.iterator](), size: 0, put: async () => {}, delete: async () => false }),
+          close: async () => {},
+        }),
+      },
+    }
     const ctx = {
       tools: { register: t => registered.push(t) },
       systemPrompt: { section() {}, context() {} },
       on() {}, effect: fn => fn(),
-      inject: (names, body) => body({ ...ctx, tushare: service, tools: { register: t => registered.push(t) } }),
+      inject: (names, body) => {
+        if (!names.every(n => services[n] !== undefined)) return
+        body({ ...ctx, ...services, tools: { register: t => registered.push(t) } })
+      },
     }
     module_.apply(ctx, module_.Config ? new module_.Config() : {})
 

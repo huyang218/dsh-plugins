@@ -1,5 +1,7 @@
 # dsh-plugin-tool-usage
 
+English | [中文](README.zh.md)
+
 Measures what a session actually spends on tools — how many calls, how long
 each tool takes, how often it fails — and exposes the tally as the `toolUsage`
 service.

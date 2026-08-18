@@ -1,5 +1,7 @@
 # dsh-plugin-tushare
 
+English | [中文](README.zh.md)
+
 Shared [Tushare Pro](https://tushare.pro) access for the finance plugins in
 this repo. It provides the `tushare` service and **registers no tools** — the
 model never calls it directly.

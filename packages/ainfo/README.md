@@ -1,5 +1,7 @@
 # dsh-plugin-ainfo
 
+English | [中文](README.zh.md)
+
 A-share **information** tools for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness):
 what was said about a company, rather than what it traded at.
 

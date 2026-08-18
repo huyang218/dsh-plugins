@@ -1,23 +1,23 @@
 {
-  "name": "dsh-plugin-tool-usage",
+  "name": "dsh-plugin-aportfolio",
   "version": "0.1.0",
-  "description": "Measures what a DeepSeek Harness session spends on tools: calls, duration percentiles and failures per tool, exposed as a service, with an optional budget warning when a session runs heavy.",
+  "description": "A-share watchlist and holdings for DeepSeek Harness: the agent remembers what you own and watch across sessions, prices it live, and reports per-position profit, weights and price-target hits.",
   "license": "MIT",
   "keywords": [
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
-    "observability",
-    "metrics",
-    "usage",
-    "cost"
+    "a-share",
+    "portfolio",
+    "watchlist",
+    "holdings"
   ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/huyang218/dsh-plugins.git",
-    "directory": "packages/tool-usage"
+    "directory": "packages/aportfolio"
   },
-  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/tool-usage#readme",
+  "homepage": "https://github.com/huyang218/dsh-plugins/tree/main/packages/aportfolio#readme",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
@@ -33,12 +33,13 @@
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
-    "category": "runtime/observability"
+    "category": "tools/finance"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "zod": "^4.0.0"
   }
 }

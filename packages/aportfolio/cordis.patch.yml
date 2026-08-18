@@ -1,0 +1,4 @@
+# dsh-plugin-aportfolio bundle layer: mounts the watchlist and holdings tools.
+- insert:
+    - id: aportfolio
+      name: dsh-plugin-aportfolio

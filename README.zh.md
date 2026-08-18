@@ -24,6 +24,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | --- | --- | --- | --- |
 | [**astock**](packages/astock) | [`tools`](docs/authoring-tools.md) | A 股数据面:行情、K 线、指标、全市场筛选、财务报表、资金流向、可转债 | 免费,部分工具需 Tushare |
 | [**ainfo**](packages/ainfo) | [`tools`](docs/authoring-tools.md) | A 股信息面:新闻、券商研报、业绩预告、分红、股东增减持、十大股东 | 需 Tushare token |
+| [**aportfolio**](packages/aportfolio) | [`tools`](docs/authoring-tools.md) | 跨会话记住你的持仓与自选,实时取价,给出盈亏、占比与目标价触发 | — |
 | [**astock-chart**](packages/astock-chart) | [`ui`](docs/authoring-ui.md) | 把 `astock_data` 的结果直接画成带成交量的 K 线图,就在回复里 | — |
 | [**tushare**](packages/tushare) | [`runtime`](docs/authoring-runtime.md) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | — |
 | [**tool-health**](packages/tool-health) | [`runtime`](docs/authoring-runtime.md) | 跨会话记住哪些工具在失败,并在下一次会话开始前就告诉模型 | — |

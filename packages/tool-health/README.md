@@ -1,5 +1,7 @@
 # dsh-plugin-tool-health
 
+English | [中文](README.zh.md)
+
 Remembers which tools have been failing — **across sessions** — and tells the
 next session before it starts work.
 
