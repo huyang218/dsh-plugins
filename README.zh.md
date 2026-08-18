@@ -32,7 +32,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 分类的后半截是领域:`tools/finance` 与 `ui/finance` 是 A 股的数据面、信息面与持仓;
 `tools/vision` 让纯文本模型能借助多模态模型看图;
 `runtime/provider`、`runtime/observability`、`runtime/reliability`、`runtime/llm`
-是共享凭证、度量、重试与网关兼容;`ui/productivity` 是 Web 客户端本身的操作效率。
+是共享凭证、度量、重试与网关兼容;`runtime/im` 让聊天软件能驱动会话;`ui/productivity` 是 Web 客户端本身的操作效率。
 
 ### 按需取用
 
@@ -49,6 +49,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 
 | 插件 | 做什么 | 包名 |
 | --- | --- | --- |
+| [im](packages/im) | 用手机上的聊天软件给 agent 下指令——飞书 / 企微 / 钉钉 / QQ 驱动真实回合并回复;白名单默认全拒 | `dsh-plugin-im` |
 | [tushare](packages/tushare) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | `dsh-plugin-tushare` |
 | [tool-health](packages/tool-health) | 记住哪些工具一直在失败,并在下一次会话开工前告诉模型 | `dsh-plugin-tool-health` |
 | [tool-usage](packages/tool-usage) | 计量每个工具的调用次数、耗时分位数与失败数,可设预算提醒 | `dsh-plugin-tool-usage` |

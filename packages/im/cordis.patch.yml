@@ -1,0 +1,10 @@
+# Bundle config layer: insert the plugin row. Nothing here is enabled by
+# default — a channel needs its credentials, and `allowFrom` needs your own
+# sender id, or every message is refused.
+#
+# Lark and WeCom deliver over an HTTP callback, so those two need this dsh to
+# be reachable from the internet. DingTalk and QQ open the socket themselves
+# and work from a laptop with nothing exposed.
+- insert:
+    - id: im
+      name: dsh-plugin-im

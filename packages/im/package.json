@@ -1,0 +1,52 @@
+{
+  "name": "dsh-plugin-im",
+  "version": "0.1.0",
+  "description": "Command the agent from a chat app on your phone: a message in Lark, WeCom, DingTalk or QQ drives a real agent turn and the reply comes back to the same chat, with an allowlist that denies by default.",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "im",
+    "lark",
+    "feishu",
+    "wecom",
+    "dingtalk",
+    "qq",
+    "chatops",
+    "mobile"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huyang218/dsh-plugins.git",
+    "directory": "packages/im"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dsh": {
+    "category": "runtime/im",
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "zod": "^4.0.0"
+  }
+}

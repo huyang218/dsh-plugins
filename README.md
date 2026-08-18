@@ -34,7 +34,7 @@ cover A-share market data, information feeds and portfolio state; `tools/vision`
 reaches a multimodal model on behalf of a text-only one;
 `runtime/provider`, `runtime/observability`, `runtime/reliability` and
 `runtime/llm` cover shared credentials, measurement, retries and gateway
-compatibility; `ui/productivity` covers the web client's own ergonomics.
+compatibility; `runtime/im` drives sessions from a chat app; `ui/productivity` covers the web client's own ergonomics.
 
 ### Pick what you need
 
@@ -51,6 +51,7 @@ compatibility; `ui/productivity` covers the web client's own ergonomics.
 
 | Plugin | What it does | Package |
 | --- | --- | --- |
+| [im](packages/im) | Command the agent from a chat app on your phone — Lark, WeCom, DingTalk or QQ drive a real turn and the reply comes back; allowlist denies by default | `dsh-plugin-im` |
 | [tushare](packages/tushare) | Shared Tushare Pro access: one token, one quota gate, one calendar, failures an agent can act on | `dsh-plugin-tushare` |
 | [tool-health](packages/tool-health) | Remembers which tools keep failing and warns the next session before it starts | `dsh-plugin-tool-health` |
 | [tool-usage](packages/tool-usage) | Counts calls, duration percentiles and failures per tool, with an optional budget warning | `dsh-plugin-tool-usage` |
