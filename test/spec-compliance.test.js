@@ -1,0 +1,105 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+
+/**
+ * Repo-wide conformance to the spec in CLAUDE.md.
+ *
+ * These rules were each learned from a failure — a default export that
+ * silently dropped `inject`, an unused import that crashed startup under
+ * symlink loading, a tool whose cancelled request kept running — and every one
+ * of them is invisible in a passing unit test of the plugin itself. Checking
+ * them here means a new package cannot quietly skip one.
+ */
+
+/** Every plugin package in the repo, discovered rather than listed. */
+function packages() {
+  const found = []
+  for (const group of ['tools', 'runtime', 'ui']) {
+    for (const entry of readdirSync(join('packages', group), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const dir = join('packages', group, entry.name)
+      found.push({ group, dir, pkg: JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) })
+    }
+  }
+  return found
+}
+
+const all = packages()
+
+test('the repo has packages to check', () => {
+  assert.ok(all.length >= 1, 'discovery found nothing — the layout changed')
+})
+
+for (const { group, dir, pkg } of all) {
+  test(`${pkg.name}: names, manifest and layout follow the spec`, async () => {
+    const entryPath = join(dir, pkg.main ?? 'lib/index.js')
+    const source = readFileSync(entryPath, 'utf8')
+
+    // ── the four names that travel together ──
+    assert.match(pkg.name, /^dsh-plugin-/, 'package name carries the prefix')
+    const module_ = await import(new URL(`../${entryPath}`, import.meta.url).href)
+    assert.ok(!('default' in module_), 'a default export makes the Loader drop `inject`')
+    assert.equal(typeof module_.apply, 'function', 'apply must be a named export')
+    assert.equal(typeof module_.name, 'string', 'name must be a named export')
+    assert.ok(!module_.name.startsWith('dsh-plugin-'),
+      'the exported name is the short one; the prefix belongs in package.json')
+
+    const patch = readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')
+    assert.match(patch, new RegExp(`name: ${pkg.name}\\b`), 'the patch row references the package by name, not a path')
+    assert.match(patch, new RegExp(`id: ${module_.name}\\b`), 'the patch row id matches the exported name')
+
+    // ── open-source packaging ──
+    assert.equal(pkg.license, 'MIT')
+    assert.ok(!pkg.private, 'a private package cannot be installed from npm')
+    assert.ok(pkg.files.includes('cordis.patch.yml'), 'the bundle layer must ship')
+    assert.ok(pkg.files.includes('LICENSE'), 'the licence must ship with the package')
+    assert.ok(!pkg.files.some(f => /test/.test(f)), 'tests do not ship')
+    assert.ok((pkg.keywords ?? []).includes('dsh-plugin'), 'plugin catalogues discover by this keyword')
+    assert.equal(pkg.dsh?.bundle?.patch, './cordis.patch.yml')
+    assert.ok(typeof pkg.dsh?.category === 'string' && pkg.dsh.category.startsWith(group + '/'),
+      `dsh.category must start with its group (${group}/…)`)
+    assert.equal(pkg.repository?.directory, dir, 'repository.directory points at this package')
+    assert.ok(existsSync(join(dir, 'README.md')), 'a package README is its npm page')
+
+    // ── no dead imports: under symlink loading a stale one is a startup crash ──
+    for (const match of source.matchAll(/^import \{([^}]+)\} from '[^']+';?$/gm)) {
+      for (const raw of match[1].split(',')) {
+        const identifier = raw.trim().split(' as ').pop().trim()
+        if (!identifier) continue
+        const body = source.replace(match[0], '')
+        assert.ok(new RegExp(`\\b${identifier}\\b`).test(body), `unused import: ${identifier}`)
+      }
+    }
+  })
+
+  test(`${pkg.name}: has an entry test asserting the export shape`, () => {
+    const testDir = join(dir, 'test')
+    assert.ok(existsSync(testDir), 'every package ships tests')
+    const suite = readdirSync(testDir).filter(f => f.endsWith('.test.js'))
+      .map(f => readFileSync(join(testDir, f), 'utf8')).join('\n')
+    assert.match(suite, /'default' in plugin/, 'the default-export regression needs its own guard')
+    assert.match(suite, /plugin\.name/, 'the exported name is part of the contract')
+  })
+}
+
+test('tool plugins keep their canonical values honest', async () => {
+  // A closed schema plus `defineTool` running at apply() catches malformed
+  // schemas, but only for tools that some test actually constructs.
+  for (const { dir, pkg } of all.filter(p => p.group === 'tools')) {
+    const module_ = await import(new URL(`../${join(dir, pkg.main)}`, import.meta.url).href)
+    const registered = []
+    const ctx = {
+      tools: { register: t => registered.push(t) },
+      systemPrompt: { section() {}, context() {} },
+      on() {}, effect: fn => fn(), inject() {},
+    }
+    module_.apply(ctx, module_.Config ? new module_.Config() : {})
+    for (const tool of registered) {
+      assert.ok(tool.output?.schema, `${tool.name} declares an output schema`)
+      assert.equal(typeof tool.output.render, 'function', `${tool.name} renders model-facing text`)
+      assert.ok(tool.timeoutMs > 0, `${tool.name} declares a timeout`)
+    }
+  }
+})

@@ -15,7 +15,7 @@
 import Schema from '@deepseek-ai/schemastery';
 import { z } from 'zod';
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain';
-import { fold, isUnhealthy, renderReport } from './health.js';
+import { fold, renderReport } from './health.js';
 
 /** Cordis plugin name used by loader diagnostics. */
 const name = 'tool-health';

@@ -99,7 +99,7 @@ const PERIOD_NAMES = {
  * @param {string} [options.endDate] - End date in YYYYMMDD format
  * @returns {Promise<Object>} K-line data
  */
-async function fetchKline(code, options = {}) {
+async function fetchKline(code, options = {}, signal) {
   const {
     period = 'daily',
     limit = 100,
@@ -130,7 +130,7 @@ async function fetchKline(code, options = {}) {
 
   const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?${params.toString()}`;
   
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: Failed to fetch K-line data for ${code}`);
   }
@@ -192,7 +192,7 @@ function parseKline(line) {
  * @param {string} code - Stock code
  * @returns {Promise<Object>} Real-time quote
  */
-async function fetchQuote(code) {
+async function fetchQuote(code, signal) {
   const secid = normalizeCode(code);
   
   const params = new URLSearchParams({
@@ -203,7 +203,7 @@ async function fetchQuote(code) {
   
   const url = `https://push2.eastmoney.com/api/qt/stock/get?${params.toString()}`;
   
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: Failed to fetch quote for ${code}`);
   }
@@ -262,7 +262,7 @@ function mapQuote(code, d) {
  * @param {string} keyword - Search keyword (stock code, name, pinyin)
  * @returns {Promise<Array>} Matching stocks
  */
-async function searchStocks(keyword) {
+async function searchStocks(keyword, signal) {
   // EastMoney search API
   const params = new URLSearchParams({
     input: keyword,
@@ -274,6 +274,7 @@ async function searchStocks(keyword) {
   
   const response = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+    signal,
   });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: Failed to search stocks`);

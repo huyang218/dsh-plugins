@@ -129,10 +129,11 @@ cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
 - **只 mock 昂贵/非确定性边界**(网络、时钟);指标计算、流改写、`render` / `presentCall` / `presentResult` 都是纯函数,直接喂数据断言输出。
 - **waterfall 插件**(如 gateway-compat):捕获监听器后用手造 async generator 喂 chunk 流,两个方向都要断言——改写命中,且真实错误路径仍原样失败。
 - **单测绿 ≠ 交付**:单测不经过 Loader 与真实组合,改完仍要走下面的验证清单。
+- **仓库级合规检查**:`test/spec-compliance.test.js` 自动遍历 `packages/*/*`,校验本文件里那些**单包单测看不见**的规则——四处名字一致、无 default 导出、无未使用 import、开源元数据齐全(license/files/keywords/category/repository.directory/README)、每包都有入口测试、tools 插件的每个工具都有 output.schema/render/timeoutMs。新增插件会被自动纳入,不需要登记。
 
 ## 验证清单(改完插件后)
 
-1. 单元测试:`npm test -w <package-name>`(改公共约定跑根 `npm test`)——抓逻辑回归与 schema 违规;
+1. 单元测试:`npm test -w <package-name>`(改公共约定跑根 `npm test`,它同时跑仓库级合规检查)——抓逻辑回归与 schema 违规;
 2. 纯加载冒烟(上面的 `node -e import` 一行)——抓语法/依赖错误;
 3. `--dump-config` 确认插件行在组合树里;
 4. 菜单重启服务,确认 `dsh-desktop.log` 出现 `serving on`(启动崩溃会记完整堆栈);

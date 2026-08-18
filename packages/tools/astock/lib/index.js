@@ -15,7 +15,7 @@
 
 import Schema from '@deepseek-ai/schemastery';
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { fetchKline, fetchQuote, searchStocks, PERIOD_NAMES, normalizeCode } from './data.js';
+import { fetchKline, fetchQuote, searchStocks } from './data.js';
 import { calculateAllIndicators } from './indicators.js';
 import { toTsCode, fetchDailyByDate, mapWithConcurrency } from './tushare.js';
 import { fetchMarketQuotes } from './market.js';
@@ -45,6 +45,11 @@ const Config = Schema.object({
     'EastMoney hosts tried in order for the whole-market list, first one that '
     + 'answers wins. Empty uses the built-in order (realtime first, delayed as '
     + 'the fallback) — override only when the defaults stop serving.',
+  ),
+  chartBars: Schema.number().default(120).description(
+    'astock_data 结果里随卡片持久化的 K 线根数。它每次调用都写进会话日志,'
+    + '所以默认只带一屏;想画更长的窗口就调大,代价是日志变大。0 表示不带,'
+    + '卡片会退回通用样式。',
   ),
   marketMaxDays: Schema.number().default(120).description(
     'Upper bound on the trading-day window astock_market_bars may request.',
@@ -103,7 +108,7 @@ const INDICATOR_OPTIONS = {
  * screen's worth of candles rather than the whole history a caller may have
  * asked for.
  */
-const CHART_BARS = 120;
+const CHART_BARS_DEFAULT = 120;
 
 /**
  * Pack the trailing bars into one compact string for the chart card.
@@ -113,11 +118,14 @@ const CHART_BARS = 120;
  * Missing metrics become empty tokens — `Number('')` is 0, so a reader must
  * test for the empty string rather than coerce blindly.
  * @param {Array<Object>} klines - Bars, oldest first
+ * @param {number} [bars] - How many trailing bars to carry; 0 carries none
  * @returns {string} `date,open,high,low,close,volume` rows joined by `;`
  */
-function packSeries(klines) {
+function packSeries(klines, bars = CHART_BARS_DEFAULT) {
+  const count = Math.max(0, Math.floor(bars));
+  if (count === 0) return '';
   const token = value => (Number.isFinite(value) ? String(value) : '');
-  return (klines ?? []).slice(-CHART_BARS).map(bar => [
+  return (klines ?? []).slice(-count).map(bar => [
     String(bar.date ?? '').replace(/-/g, ''),
     token(bar.open), token(bar.high), token(bar.low), token(bar.close), token(bar.volume),
   ].join(',')).join(';');
@@ -346,7 +354,7 @@ function apply(ctx, config) {
         periodName: value.periodName,
         total: value.total,
         latestKline: value.klines.length > 0 ? value.klines[value.klines.length - 1] : null,
-        series: packSeries(value.klines),
+        series: packSeries(value.klines, config?.chartBars ?? CHART_BARS_DEFAULT),
       }),
     },
     timeoutMs: 30000,
@@ -480,7 +488,7 @@ function apply(ctx, config) {
         period: args.period || 'daily',
         limit: args.limit || 100,
         fq: args.fq !== false,
-      });
+      }, exec.signal);
 
       // Calculate indicators
       const indicators = calculateAllIndicators(data.klines, indicatorOptions);
@@ -589,7 +597,7 @@ function apply(ctx, config) {
     timeoutMs: 15000,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      return await fetchQuote(args.code);
+      return await fetchQuote(args.code, exec.signal);
     },
     presentCall: (args) => ({
       card: 'generic',
@@ -668,7 +676,7 @@ function apply(ctx, config) {
     timeoutMs: 15000,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const stocks = await searchStocks(args.keyword);
+      const stocks = await searchStocks(args.keyword, exec.signal);
       return {
         results: stocks.map(s => ({
           code: s.code,

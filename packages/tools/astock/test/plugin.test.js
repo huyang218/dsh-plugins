@@ -413,3 +413,34 @@ test('the provider unlocks exactly the Tushare-backed tools', () => {
     assert.ok(!/需要已配置 token/.test(tool.description), `${name} works without credentials`)
   }
 })
+
+test('every tool forwards exec.signal to its request', async (t) => {
+  // Rule 8 of the spec, and easy to lose: a tool that ignores the signal keeps
+  // its HTTP request running after the turn is cancelled, and the caller has
+  // no way to stop it.
+  const ctx = fakeCtx({ tushare: fakeTushare({}, ['20260814']) })
+  plugin.apply(ctx, new plugin.Config())
+
+  const real = globalThis.fetch
+  t.after(() => { globalThis.fetch = real })
+  const seen = []
+  globalThis.fetch = async (_url, init) => {
+    seen.push(init?.signal)
+    return new Response(JSON.stringify({
+      data: { name: 'x', klines: ['2026-08-14,1,2,3,0.5,10,20,1,1,1,1'], f43: 1, f58: 'x', diff: [] },
+    }))
+  }
+
+  const signal = AbortSignal.timeout(60_000)
+  for (const [name, args] of [
+    ['astock_quote', { code: '600519' }],
+    ['astock_search', { keyword: '茅台' }],
+    ['astock_indicators', { code: '600519', limit: 10 }],
+    ['astock_data', { code: '600519', limit: 5 }],
+  ]) {
+    seen.length = 0
+    await ctx._tools.find(t2 => t2.name === name).execute(args, { signal }).catch(() => {})
+    assert.ok(seen.length > 0, `${name} made no request`)
+    assert.ok(seen.every(s => s === signal), `${name} must pass exec.signal to fetch`)
+  }
+})
