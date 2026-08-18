@@ -31,6 +31,24 @@ test('the bundle registers itself in the loader factory form', () => {
   assert.equal(typeof bundle.parseSeries, 'function')
 })
 
+test('every service the plugin reads is declared in inject', () => {
+  // Cordis refuses an undeclared property, and the failure is not a missing
+  // card: the entry fails to apply and the browser shows "Failed to load
+  // plugins". This is what that costs when it is only found by running it.
+  assert.deepEqual(bundle.inject, ['slots'])
+
+  const read = []
+  const probe = new Proxy({}, {
+    get: (_target, key) => {
+      if (typeof key === 'string') read.push(key)
+      return new Proxy(() => {}, { get: () => () => {}, apply: () => {} })
+    },
+  })
+  bundle.apply(probe)
+  const undeclared = [...new Set(read)].filter(key => !bundle.inject.includes(key))
+  assert.deepEqual(undeclared, [], `apply() reads undeclared services: ${undeclared}`)
+})
+
 test('parseSeries decodes rows and drops bars without a full candle', () => {
   const bars = bundle.parseSeries('20260813,10,11,9,10.5,1000;20260814,10.5,12,10,11.8,2000')
   assert.equal(bars.length, 2)

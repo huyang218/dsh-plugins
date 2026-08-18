@@ -170,6 +170,16 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Services this plugin reads off `ctx`.
+     *
+     * Cordis refuses a property that was not declared — reading `ctx.slots`
+     * without this fails the whole entry at load with
+     * `cannot get property "slots" without inject`, which takes the plugin
+     * list down with it rather than just skipping the card.
+     */
+    const inject = ['slots']
+
+    /**
      * Register the card for astock_data.
      * @param {Object} ctx - Client plugin context
      */
@@ -181,6 +191,7 @@ window.__ModuleLoader__.load({
     }
 
     exports.apply = apply
+    exports.inject = inject
     exports.ChartCard = ChartCard
     exports.parseSeries = parseSeries
     exports.candleGeometry = candleGeometry
