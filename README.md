@@ -35,9 +35,39 @@ cover A-share market data, information feeds and portfolio state;
 `runtime/llm` cover shared credentials, measurement, retries and gateway
 compatibility; `ui/productivity` covers the web client's own ergonomics.
 
-**Browse [`packages/`](packages)** for the current set — each plugin's own
-README, in English and 中文, is the accurate description of what it does and
-what it costs to run.
+### Pick what you need
+
+**`tools/` — capabilities the model can call**
+
+| Plugin | What it does | Package |
+| --- | --- | --- |
+| [astock](packages/astock) | A-share quotes, K-lines, indicators, whole-market screening, financials, money flow, convertible bonds — free, a few tools need a Tushare token | `dsh-plugin-astock` |
+| [ainfo](packages/ainfo) | A-share news, broker research, earnings pre-announcements, dividends, insider trades, shareholders — needs a Tushare token | `dsh-plugin-ainfo` |
+| [aportfolio](packages/aportfolio) | Holdings and watchlist that survive the session, priced live, with profit, weights and target hits | `dsh-plugin-aportfolio` |
+
+**`runtime/` — behaviour around the harness, invisible to the model**
+
+| Plugin | What it does | Package |
+| --- | --- | --- |
+| [tushare](packages/tushare) | Shared Tushare Pro access: one token, one quota gate, one calendar, failures an agent can act on | `dsh-plugin-tushare` |
+| [tool-health](packages/tool-health) | Remembers which tools keep failing and warns the next session before it starts | `dsh-plugin-tool-health` |
+| [tool-usage](packages/tool-usage) | Counts calls, duration percentiles and failures per tool, with an optional budget warning | `dsh-plugin-tool-usage` |
+| [tool-retry](packages/tool-retry) | Retries transient failures — socket resets, rate limits, timeouts — for tools an operator declares repeatable | `dsh-plugin-tool-retry` |
+| [gateway-compat](packages/gateway-compat) | Keeps a finished reply from failing when a gateway ends its SSE stream without `[DONE]` | `dsh-plugin-gateway-compat` |
+
+**`ui/` — web client extensions**
+
+| Plugin | What it does | Package |
+| --- | --- | --- |
+| [astock-chart](packages/astock-chart) | Draws `astock_data` as a candlestick chart with volume, in the reply — needs `native` or `both` presentation | `dsh-plugin-astock-chart` |
+| [shortcuts](packages/shortcuts) | Keyboard shortcuts for the web client: 34 features, every binding recordable | `dsh-plugin-shortcuts` |
+
+Each plugin's own README, in English and 中文, is the accurate account of what
+it does and what it costs to run. Install any of them by package name:
+
+```sh
+dsh plugin --profile web add dsh-plugin-astock
+```
 
 **Looking for something this repo does not ship?** [CATALOG.md](CATALOG.md)
 lists plugins maintained elsewhere, by category.

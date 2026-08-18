@@ -216,3 +216,14 @@ test('a plugin whose behaviour depends on the presentation mode says so', () => 
     }
   }
 })
+
+test('the root READMEs list every plugin the repo ships', () => {
+  // A menu is only useful if it is complete, and nothing about adding a
+  // package makes anyone revisit the README — which is exactly how a plugin
+  // ends up shipped but unfindable.
+  for (const file of ['README.md', 'README.zh.md']) {
+    const text = readFileSync(file, 'utf8')
+    const missing = all.map(({ pkg }) => pkg.name).filter(name => !text.includes(name))
+    assert.deepEqual(missing, [], `${file} does not list: ${missing.join(', ')}`)
+  }
+})

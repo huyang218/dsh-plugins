@@ -33,8 +33,38 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 `runtime/provider`、`runtime/observability`、`runtime/reliability`、`runtime/llm`
 是共享凭证、度量、重试与网关兼容;`ui/productivity` 是 Web 客户端本身的操作效率。
 
-**插件列表见 [`packages/`](packages)**——每个插件自己的中英文 README 才是它做什么、
-需要什么代价的准确说明。
+### 按需取用
+
+**`tools/` — 模型可调用的能力**
+
+| 插件 | 做什么 | 包名 |
+| --- | --- | --- |
+| [astock](packages/astock) | A 股行情、K 线、技术指标、全市场筛选、财报、资金流、可转债——免费,少数工具需 Tushare token | `dsh-plugin-astock` |
+| [ainfo](packages/ainfo) | A 股新闻、券商研报、业绩预告、分红、股东增减持、十大股东——需 Tushare token | `dsh-plugin-ainfo` |
+| [aportfolio](packages/aportfolio) | 跨会话记住持仓与自选,实时估值,给出盈亏、占比与目标价触发 | `dsh-plugin-aportfolio` |
+
+**`runtime/` — 围绕 harness 的行为,模型看不见**
+
+| 插件 | 做什么 | 包名 |
+| --- | --- | --- |
+| [tushare](packages/tushare) | 共享的 Tushare Pro 接入:一个 token、一个配额闸、一份交易日历,以及 Agent 能据以行动的错误分类 | `dsh-plugin-tushare` |
+| [tool-health](packages/tool-health) | 记住哪些工具一直在失败,并在下一次会话开工前告诉模型 | `dsh-plugin-tool-health` |
+| [tool-usage](packages/tool-usage) | 计量每个工具的调用次数、耗时分位数与失败数,可设预算提醒 | `dsh-plugin-tool-usage` |
+| [tool-retry](packages/tool-retry) | 对 socket 重置、限流、超时这类可恢复失败做重试,只针对运维点名可安全重复的工具 | `dsh-plugin-tool-retry` |
+| [gateway-compat](packages/gateway-compat) | 网关的 SSE 流缺 `[DONE]` 时,不让一次已经完整的回复被判为失败 | `dsh-plugin-gateway-compat` |
+
+**`ui/` — Web 客户端扩展**
+
+| 插件 | 做什么 | 包名 |
+| --- | --- | --- |
+| [astock-chart](packages/astock-chart) | 把 `astock_data` 的结果画成带成交量的 K 线图——需要 `native` 或 `both` 呈现模式 | `dsh-plugin-astock-chart` |
+| [shortcuts](packages/shortcuts) | Web 客户端键盘快捷键:34 个功能,每个绑定都可自己录制 | `dsh-plugin-shortcuts` |
+
+每个插件自己的中英文 README 才是它做什么、需要什么代价的准确说明。按包名安装:
+
+```sh
+dsh plugin --profile web add dsh-plugin-astock
+```
 
 **想找本仓库没有的插件?** [CATALOG.zh.md](CATALOG.zh.md) 按分类列出了由他人维护的插件。
 
