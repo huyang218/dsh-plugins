@@ -18,7 +18,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { assistantText, emptyTurnNote, helpText, isAllowed, parseLine, segment } from './policy.js'
+import { assistantText, emptyTurnNote, helpText, isAllowed, messages, parseLine, segment } from './policy.js'
 
 /**
  * Wire the chat side to the session side.
@@ -28,6 +28,8 @@ import { assistantText, emptyTurnNote, helpText, isAllowed, parseLine, segment }
  * @returns {Object} `{ handle, dispose }` — `handle(inbound, channel)` per message
  */
 export function createBridge(ctx, { config, routes, log }) {
+  const say = messages(config.language)
+
   // sessionId -> what to do with this turn's output. A turn the bridge did not
   // start (someone typing in the web UI) has no entry here and is left alone:
   // a chat bridge that echoes another surface's conversation is a surprise, not
@@ -53,7 +55,7 @@ export function createBridge(ctx, { config, routes, log }) {
     const body = pending.parts.join('\n\n')
     const text = body.trim().length > 0
       ? body
-      : emptyTurnNote({ tools: pending.tools, cancelled: event.data?.reason === 'cancelled' })
+      : emptyTurnNote({ tools: pending.tools, cancelled: event.data?.reason === 'cancelled' }, config.language)
     void pending.reply(text).catch(error => {
       log.warn(`[im] could not deliver a reply to ${pending.chatKey}: ${String(error)}`)
     })
@@ -150,7 +152,7 @@ export function createBridge(ctx, { config, routes, log }) {
       }))
     } catch (error) {
       awaiting.delete(agent.session.id)
-      await reply(`Could not hand that to the agent: ${String(error)}`)
+      await reply(say.handoffFailed(String(error)))
     }
   }
 
@@ -162,12 +164,12 @@ export function createBridge(ctx, { config, routes, log }) {
    */
   async function runCommand(line, { chatKey, reply }) {
     if (line.name === '/help') {
-      await reply(helpText())
+      await reply(helpText(config.language))
       return
     }
     if (line.name === '/new') {
       const agent = await agentFor(chatKey, true)
-      await reply(`Started a new session: ${agent.session.id}`)
+      await reply(say.newSession(agent.session.id))
       return
     }
 
@@ -176,22 +178,28 @@ export function createBridge(ctx, { config, routes, log }) {
 
     if (line.name === '/status') {
       if (agent === undefined) {
-        await reply('No session yet — send anything and one will be started.')
+        await reply(say.noSessionYet)
         return
       }
-      const busy = awaiting.has(agent.session.id)
-      await reply(`Session ${agent.session.id}\nWorkspace ${agent.session.header?.cwd ?? '(unknown)'}\n${busy ? 'A turn is running.' : 'Idle.'}`)
+      await reply(say.status({
+        id: agent.session.id,
+        cwd: agent.session.header?.cwd ?? '(unknown)',
+        busy: awaiting.has(agent.session.id),
+      }))
       return
     }
     if (line.name === '/stop') {
-      if (agent === undefined) {
-        await reply('Nothing to stop: this chat has no session.')
+      // Report what is true: cancelling an idle session and answering
+      // "cancelled" teaches the reader that /stop does nothing observable, and
+      // the next time a turn really is stuck they will not trust it.
+      if (agent === undefined || !awaiting.has(agent.session.id)) {
+        await reply(say.nothingToStop)
         return
       }
       // keepInbox so a queued line is not silently thrown away along with the
       // turn the user meant to interrupt.
       agent.cancel({ kind: 'user' }, { keepInbox: true })
-      await reply('Cancelled.')
+      await reply(say.cancelled)
     }
   }
 

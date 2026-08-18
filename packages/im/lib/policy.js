@@ -10,12 +10,65 @@
  * @module dsh-plugin-im/policy
  */
 
-/** Commands understood in a chat line, and what each one means. */
+/** The commands, and what each one does, per language. */
 export const COMMANDS = {
-  '/new': 'start a fresh session for this chat',
-  '/stop': 'cancel the turn that is running',
-  '/status': 'report which session this chat drives and whether it is busy',
-  '/help': 'list these commands',
+  zh: {
+    '/new': '为这个聊天开一个新会话',
+    '/stop': '取消正在跑的回合(已排队的内容保留)',
+    '/status': '这个聊天对应哪个会话、工作区在哪、是否在忙',
+    '/help': '列出这些命令',
+  },
+  en: {
+    '/new': 'start a fresh session for this chat',
+    '/stop': 'cancel the turn that is running (anything queued is kept)',
+    '/status': 'which session this chat drives, its workspace, and whether it is busy',
+    '/help': 'list these commands',
+  },
+}
+
+/**
+ * Everything the bridge itself says in a chat.
+ *
+ * These lines are read by a person on a phone, not by the model, so they follow
+ * the operator's language rather than the repository's. Chinese is the default
+ * because that is who this is for; `language: 'en'` switches the lot.
+ */
+export const MESSAGES = {
+  zh: {
+    commands: '命令:',
+    newSession: id => `已开新会话:${id}`,
+    status: ({ id, cwd, busy }) => `会话 ${id}\n工作区 ${cwd}\n${busy ? '有一个回合正在跑。' : '空闲。'}`,
+    noSessionYet: '这个聊天还没有会话——发任何一句话就会开一个。',
+    nothingToStop: '没有正在跑的回合。',
+    cancelled: '已取消。',
+    handoffFailed: reason => `没能把这句交给 agent:${reason}`,
+    turnFailed: reason => `这个回合失败了:${reason}`,
+    turnCancelled: '这个回合被取消了。',
+    turnToolsOnly: count => `回合结束,期间调用了 ${count} 次工具,但没有写出文字回复。`,
+    turnSilent: '回合结束了,没有回复。',
+  },
+  en: {
+    commands: 'Commands:',
+    newSession: id => `Started a new session: ${id}`,
+    status: ({ id, cwd, busy }) => `Session ${id}\nWorkspace ${cwd}\n${busy ? 'A turn is running.' : 'Idle.'}`,
+    noSessionYet: 'No session yet — send anything and one will be started.',
+    nothingToStop: 'Nothing is running.',
+    cancelled: 'Cancelled.',
+    handoffFailed: reason => `Could not hand that to the agent: ${reason}`,
+    turnFailed: reason => `The turn failed: ${reason}`,
+    turnCancelled: 'The turn was cancelled.',
+    turnToolsOnly: count => `The turn ended after ${count} tool call(s) without a written reply.`,
+    turnSilent: 'The turn ended without a reply.',
+  },
+}
+
+/**
+ * The message table for a language, falling back rather than failing.
+ * @param {string} language - 'zh' or 'en'.
+ * @returns {Object} the table
+ */
+export function messages(language) {
+  return MESSAGES[language] ?? MESSAGES.zh
 }
 
 /**
@@ -78,15 +131,20 @@ export function parseLine(text) {
   const trimmed = typeof text === 'string' ? text.trim() : ''
   if (trimmed.length === 0) return { kind: 'empty' }
   const match = /^(\/[a-z]+)(?:\s+([\s\S]*))?$/.exec(trimmed)
-  if (match !== null && Object.hasOwn(COMMANDS, match[1])) {
+  if (match !== null && Object.hasOwn(COMMANDS.zh, match[1])) {
     return { kind: 'command', name: match[1], argument: (match[2] ?? '').trim() }
   }
   return { kind: 'prompt', text: trimmed }
 }
 
-/** The help text, derived from COMMANDS so the two cannot drift apart. */
-export function helpText() {
-  return ['Commands:', ...Object.entries(COMMANDS).map(([name, what]) => `${name} — ${what}`)].join('\n')
+/**
+ * The help text, derived from COMMANDS so the list and the code cannot drift.
+ * @param {string} language - 'zh' or 'en'.
+ * @returns {string} one line per command
+ */
+export function helpText(language = 'zh') {
+  const table = COMMANDS[language] ?? COMMANDS.zh
+  return [messages(language).commands, ...Object.entries(table).map(([name, what]) => `${name} — ${what}`)].join('\n')
 }
 
 /**
@@ -156,9 +214,10 @@ export function assistantText(message) {
  * @param {Object} outcome - `{ turns, tools, cancelled, error }` for the turn.
  * @returns {string} a line to send instead of nothing.
  */
-export function emptyTurnNote(outcome = {}) {
-  if (outcome.error !== undefined) return `The turn failed: ${outcome.error}`
-  if (outcome.cancelled === true) return 'The turn was cancelled.'
-  if (Number(outcome.tools) > 0) return `The turn ended after ${outcome.tools} tool call(s) without a written reply.`
-  return 'The turn ended without a reply.'
+export function emptyTurnNote(outcome = {}, language = 'zh') {
+  const say = messages(language)
+  if (outcome.error !== undefined) return say.turnFailed(outcome.error)
+  if (outcome.cancelled === true) return say.turnCancelled
+  if (Number(outcome.tools) > 0) return say.turnToolsOnly(outcome.tools)
+  return say.turnSilent
 }

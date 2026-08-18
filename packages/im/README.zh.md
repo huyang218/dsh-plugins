@@ -60,7 +60,7 @@ dsh plugin --profile web add dsh-plugin-im
 | 命令 | 作用 |
 | --- | --- |
 | `/new` | 为这个聊天开一个新会话 |
-| `/stop` | 取消正在跑的回合,已排队的内容保留 |
+| `/stop` | 取消正在跑的回合,已排队的内容保留;没有回合在跑时会如实说明 |
 | `/status` | 这个聊天对应哪个会话、工作区在哪、当前是否在忙 |
 | `/help` | 列出这些 |
 
@@ -85,6 +85,7 @@ dsh plugin --profile web add dsh-plugin-im
 | `cwd` | *(dsh 自己的工作目录)* | 从聊天新建会话时的工作区 |
 | `agentPreset` | *(部署默认)* | 这些会话用哪个预设 |
 | `replyChars` | `1800` | 单条消息上限,超出切分 |
+| `language` | `zh` | 机器人自己说的话用哪种语言(不影响模型回复本身) |
 | `refusalNotice` | *(空)* | 回给未授权者的话;空 = 什么都不回 |
 | `dedupeEntries` | `500` | 记住多少条已处理的消息 id |
 | `lark` / `wecom` / `dingtalk` / `qq` | 关闭 | 各渠道凭证 |

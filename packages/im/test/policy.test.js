@@ -43,9 +43,25 @@ test('a known command is a command; anything else is a prompt', () => {
   assert.deepEqual(parseLine(undefined), { kind: 'empty' })
 })
 
-test('help lists every command that exists', () => {
-  const text = helpText()
-  for (const name of Object.keys(COMMANDS)) assert.ok(text.includes(name), `${name} is missing from help`)
+test('help lists every command that exists, in either language', () => {
+  for (const language of ['zh', 'en']) {
+    const text = helpText(language)
+    for (const name of Object.keys(COMMANDS[language])) {
+      assert.ok(text.includes(name), `${name} is missing from ${language} help`)
+    }
+  }
+  // The two tables have to describe the same set, or a command exists in one
+  // language and is undocumented in the other.
+  assert.deepEqual(Object.keys(COMMANDS.zh), Object.keys(COMMANDS.en))
+})
+
+test('what the bridge says follows the operator language, defaulting to Chinese', () => {
+  // These lines are read by a person on a phone, not by the model.
+  assert.match(emptyTurnNote({ tools: 2 }), /工具/)
+  assert.match(emptyTurnNote({ tools: 2 }, 'en'), /tool call/)
+  assert.match(helpText(), /为这个聊天开一个新会话/)
+  // An unknown language falls back rather than sending "undefined".
+  assert.match(emptyTurnNote({}, 'fr'), /回复/)
 })
 
 test('a short reply is sent as it is', () => {
@@ -92,8 +108,8 @@ test('only text blocks are the answer', () => {
 test('a turn with no text still says something', () => {
   // Silence would read as the bridge being broken, which is the one thing it
   // must never be mistaken for.
-  assert.match(emptyTurnNote({ tools: 3 }), /3 tool call/)
-  assert.match(emptyTurnNote({ cancelled: true }), /cancelled/)
+  assert.match(emptyTurnNote({ tools: 3 }), /3/)
+  assert.match(emptyTurnNote({ cancelled: true }), /取消/)
   assert.match(emptyTurnNote({ error: 'no model' }), /no model/)
   assert.ok(emptyTurnNote({}).length > 0)
 })

@@ -73,6 +73,10 @@ const Config = Schema.object({
     '单条回复的最大字符数,超出按段切分并标 `[1/3]`。聊天平台会拒收或截断过长消息,'
     + '而被截断的答案比被切分的更糟——读者看不出后面还有。',
   ),
+  language: Schema.union(['zh', 'en']).default('zh').description(
+    '机器人自己说的话用哪种语言(命令说明、`已取消`、`回合结束没有回复` 这类)。'
+    + '这些是给人看的,不是给模型看的——模型的回复本身用什么语言由你怎么问决定。',
+  ),
   refusalNotice: Schema.string().default('').description(
     '拒绝未授权发送者时回给对方的话。**留空(默认)= 什么都不回**:对陌生人沉默,'
     + '比告诉他「你不在白名单里」更少暴露这个机器人在做什么。',
@@ -117,6 +121,29 @@ const Config = Schema.object({
   ),
 })
 
+/** What each channel cannot work without. */
+const REQUIRED = {
+  lark: ['appId', 'appSecret'],
+  wecom: ['corpId', 'corpSecret', 'token', 'encodingAesKey'],
+  dingtalk: ['clientId', 'clientSecret'],
+  qq: ['appId', 'appSecret'],
+}
+
+/**
+ * The credentials a channel is enabled without.
+ *
+ * Checked before connecting, because the alternative is what it did before:
+ * dial out with an empty key, fail, and retry on a backoff — filling the log
+ * with transport errors when the answer is a blank config field.
+ *
+ * @param {string} key - the channel name.
+ * @param {Object} settings - that channel's config.
+ * @returns {string[]} missing field names.
+ */
+export function missingCredentials(key, settings) {
+  return REQUIRED[key].filter(field => String(settings[field] ?? '').trim().length === 0)
+}
+
 /**
  * Wire the enabled channels to the session bridge.
  * @param {Object} ctx - the plugin context.
@@ -128,7 +155,16 @@ function apply(ctx, config) {
     warn: message => ctx.logger?.warn?.(message),
   }
 
-  const enabled = ['lark', 'wecom', 'dingtalk', 'qq'].filter(key => config[key].enabled)
+  const enabled = []
+  for (const key of ['lark', 'wecom', 'dingtalk', 'qq']) {
+    if (!config[key].enabled) continue
+    const missing = missingCredentials(key, config[key])
+    if (missing.length > 0) {
+      log.warn(`[im] ${key} is enabled but missing ${missing.join(', ')}; not connecting`)
+      continue
+    }
+    enabled.push(key)
+  }
   if (enabled.length === 0) {
     log.warn('[im] no channel is enabled; nothing to bridge')
     return

@@ -71,7 +71,7 @@ Send anything and it becomes the prompt. Four commands:
 | Command | What it does |
 | --- | --- |
 | `/new` | start a fresh session for this chat |
-| `/stop` | cancel the turn that is running, keeping anything queued |
+| `/stop` | cancel the turn that is running, keeping anything queued; says so plainly when nothing is |
 | `/status` | which session this chat drives, its workspace, and whether it is busy |
 | `/help` | list these |
 
@@ -101,6 +101,7 @@ saying so — silence is the one thing a bridge must never be mistaken for.
 | `cwd` | *(dsh's own)* | workspace for sessions started from a chat |
 | `agentPreset` | *(deployment default)* | preset for those sessions |
 | `replyChars` | `1800` | largest chat message before splitting |
+| `language` | `zh` | language for what the bridge itself says (not the model's answers) |
 | `refusalNotice` | *(empty)* | what to tell an unauthorised sender; empty says nothing |
 | `dedupeEntries` | `500` | how many delivery ids to remember |
 | `lark` / `wecom` / `dingtalk` / `qq` | disabled | per-channel credentials |

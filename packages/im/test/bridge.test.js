@@ -61,6 +61,7 @@ function fakeChannel(name = 'lark') {
 }
 
 const CONFIG = {
+  language: 'en',
   allowFrom: ['ou_me'],
   cwd: '/work',
   agentPreset: '',
@@ -223,8 +224,24 @@ test('/stop and /status before there is a session say so plainly', async () => {
 
   await bridge.handle(message('/stop'), channel)
   await bridge.handle(message('/status'), channel)
-  assert.match(sent[0], /no session/)
+  assert.match(sent[0], /Nothing is running/)
   assert.match(sent[1], /No session yet/)
+})
+
+test('/stop on an idle session reports that, rather than claiming a cancel', async () => {
+  // Answering "cancelled" when nothing was running teaches the reader that
+  // /stop does nothing observable — and then they will not trust it when a turn
+  // really is stuck.
+  const { host, bridge } = setup()
+  const { channel, sent } = fakeChannel()
+
+  await bridge.handle(message('quick job'), channel)
+  host.emit(host.created[0].sessionId, 'turn/end', {})
+  await new Promise(resolve => setImmediate(resolve))
+
+  await bridge.handle(message('/stop'), channel)
+  assert.deepEqual(host.cancelled, [], 'an idle session is not cancelled')
+  assert.match(sent.at(-1), /Nothing is running/)
 })
 
 test('/status reports the session, the workspace and whether it is busy', async () => {

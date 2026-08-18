@@ -89,3 +89,22 @@ test('a callback channel says it needs a public address, a socket channel says i
   }))
   assert.ok(callback.infos.some(message => message.includes('reachable from the internet')))
 })
+
+test('a channel enabled without its credentials is named, not dialled', () => {
+  // Dialling out with an empty key fails on a backoff, which fills the log with
+  // transport errors when the answer is a blank config field.
+  const { ctx, warnings } = fakeContext()
+  plugin.apply(ctx, new plugin.Config({ allowFrom: ['x'], qq: { enabled: true } }))
+
+  const notice = warnings.find(message => message.includes('qq is enabled'))
+  assert.ok(notice, 'the log has to say which channel and which field')
+  assert.match(notice, /appId/)
+  assert.match(notice, /appSecret/)
+})
+
+test('the required-credential list matches what each channel actually uses', () => {
+  assert.deepEqual(plugin.missingCredentials('qq', { appId: 'a', appSecret: 's' }), [])
+  assert.deepEqual(plugin.missingCredentials('dingtalk', {}), ['clientId', 'clientSecret'])
+  // Whitespace is not a credential.
+  assert.deepEqual(plugin.missingCredentials('lark', { appId: '  ', appSecret: 's' }), ['appId'])
+})
