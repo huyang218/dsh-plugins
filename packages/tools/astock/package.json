@@ -15,10 +15,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR-GITHUB-USERNAME/dsh-plugins.git",
+    "url": "git+https://github.com/huyang218/dsh-plugin.git",
     "directory": "packages/tools/astock"
   },
-  "homepage": "https://github.com/YOUR-GITHUB-USERNAME/dsh-plugins/tree/main/packages/tools/astock#readme",
+  "homepage": "https://github.com/huyang218/dsh-plugin/tree/main/packages/tools/astock#readme",
   "type": "module",
   "main": "lib/index.js",
   "scripts": {
