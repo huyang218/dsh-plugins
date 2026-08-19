@@ -111,7 +111,27 @@ Signs the **whole file** with a CMS signature from your PKCS#12 (`.p12`/`.pfx`)
 certificate. This is the part with legal weight: any later edit — including
 another stamp — is detectable, and the certificate says who signed.
 
-**Configure the certificate once** and later calls need only `pdf_path`:
+### Configuring the key from the client (preferred)
+
+The web client has a **Settings → 签章证书** page: give it the `.p12` path and
+the passphrase, and `seal_sign` then needs only `pdf_path`.
+
+What differs from putting it in the config file is **where the passphrase ends
+up**: a credential saved here goes into this machine's **storage domain**, not
+into the profile's `cordis.patch.yml` — the file that gets backed up, synced,
+committed by accident and pasted into issues. The page is never given the
+passphrase back, only told that one is held; a route that returned it would put
+it in every browser cache and devtools log that opened the page.
+
+> [!NOTE]
+> The storage domain is not a keychain: it is unencrypted on disk and readable
+> by anything running as you. What it buys is that the passphrase stops
+> travelling with the configuration, which is where these leaks come from — not
+> that it is protected. For stronger protection, use a certificate held in the
+> operating system's keychain.
+
+**Or configure it in the plugin settings**, after which calls need only
+`pdf_path`:
 
 ```yaml
 - id: seal
@@ -121,8 +141,9 @@ another stamp — is detectable, and the certificate says who signed.
     # passphrase: '…'                      # also works, see the warning
 ```
 
-The passphrase is taken from, in order: **the call, then the environment
-variable named by `passphraseEnv`, then the `passphrase` setting**. A named
+The passphrase is taken from, in order: **the call, then the credential saved
+from the client, then the environment variable named by `passphraseEnv`, then
+the `passphrase` setting**. A named
 variable that is unset is an **error** rather than a quiet fall back to the
 plaintext one — otherwise you would sign with a different credential than you
 configured. The result names the source that was used, never the value.

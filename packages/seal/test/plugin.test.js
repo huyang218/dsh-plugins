@@ -10,9 +10,11 @@ function fakeContext() {
     tools: { register: tool => tools.push(tool) },
     systemPrompt: { section: section => sections.push(section) },
     fs: {},
+    webServer: { register: () => () => {} },
     on: () => () => {},
     effect: () => {},
-    logger: { warn: () => {} },
+    inject: () => {},
+    logger: { warn: () => {}, info: () => {} },
   }
   return { ctx, tools, sections }
 }
@@ -21,7 +23,7 @@ test('the plugin exports the named shape a loader entry needs', () => {
   assert.equal('default' in plugin, false)
   assert.equal(plugin.name, 'seal')
   assert.equal(typeof plugin.apply, 'function')
-  assert.deepEqual(plugin.inject, ['tools', 'fs', 'systemPrompt'])
+  assert.deepEqual(plugin.inject, ['tools', 'fs', 'systemPrompt', 'webServer'])
 })
 
 test('all four tools are registered, with schemas a closed output demands', () => {
@@ -263,4 +265,76 @@ test('a page that is not A4 is called out, since that is why a seal looks wrong'
   assert.equal(plugin.isA4([210.1, 297.1]), true, 'a fraction of a millimetre is still A4')
   assert.equal(plugin.isA4([437, 619]), false)
   assert.equal(plugin.isA4([]), false)
+})
+
+/**
+ * Drive the credential route the way the client does.
+ * @param {Object} route - the registered route spec.
+ * @param {string} method - GET, POST or DELETE.
+ * @param {Object} [body] - JSON to send.
+ * @returns {Promise<Object>} `{ status, value }`
+ */
+async function callRoute(route, method, body) {
+  const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body))]
+  const request = {
+    method,
+    url: '/seal/credential',
+    async *[Symbol.asyncIterator]() { yield* chunks },
+  }
+  let status
+  let text = ''
+  await new Promise(resolve => {
+    route.handler(request, {
+      writeHead(code) { status = code },
+      end(payload) { text = payload ?? ''; resolve() },
+    })
+  })
+  return { status, value: text === '' ? undefined : JSON.parse(text) }
+}
+
+test('the client can set, read back and clear the signing credential', async () => {
+  const { ctx, tools } = fakeContext()
+  const routes = []
+  ctx.webServer = { register: spec => { routes.push(spec); return () => {} } }
+  ctx.effect = fn => fn()
+  ctx.inject = () => {}
+  plugin.apply(ctx, new plugin.Config())
+
+  assert.equal(tools.length, 4)
+  const route = routes.find(one => one.path === '/seal/credential')
+  assert.ok(route, 'the client has no way to configure anything without this route')
+
+  assert.deepEqual((await callRoute(route, 'GET')).value, {
+    p12Path: '', hasPassphrase: false, updatedAt: 0, durable: false,
+  })
+
+  const saved = await callRoute(route, 'POST', { p12Path: '/keys/company.p12', passphrase: 'secret' })
+  assert.equal(saved.status, 200)
+  assert.equal(saved.value.p12Path, '/keys/company.p12')
+  assert.equal(saved.value.hasPassphrase, true)
+
+  // The read-back must never carry the passphrase — this is the property that
+  // keeps it out of browser caches and devtools logs.
+  const readBack = await callRoute(route, 'GET')
+  assert.equal(JSON.stringify(readBack.value).includes('secret'), false)
+
+  const cleared = await callRoute(route, 'DELETE')
+  assert.equal(cleared.value.hasPassphrase, false)
+  assert.equal(cleared.value.p12Path, '')
+})
+
+test('the route refuses a public certificate and an unknown method', async () => {
+  const { ctx } = fakeContext()
+  const routes = []
+  ctx.webServer = { register: spec => { routes.push(spec); return () => {} } }
+  ctx.effect = fn => fn()
+  ctx.inject = () => {}
+  plugin.apply(ctx, new plugin.Config())
+  const route = routes[0]
+
+  const refused = await callRoute(route, 'POST', { p12Path: '/keys/company.cer' })
+  assert.equal(refused.status, 400)
+  assert.match(refused.value.error, /public half/)
+
+  assert.equal((await callRoute(route, 'PUT', {})).status, 405)
 })

@@ -116,7 +116,8 @@ test('tool plugins keep their canonical values honest', async () => {
       // A tools/ plugin may also provide a service and reach for another —
       // the vision tool provides its bridge and resolves the sandboxed fs —
       // and a harness missing those fails the plugin for the harness's own gap.
-      provide() {}, emit() {}, fs: {}, logger: { warn() {} },
+      provide() {}, emit() {}, fs: {}, logger: { warn() {}, info() {} },
+      webServer: { register: () => () => {} },
       on() {}, effect: fn => fn(), inject() {},
     }
     module_.apply(ctx, module_.Config ? new module_.Config() : {})
@@ -173,7 +174,8 @@ test('a tool whose summary hides rows says so', async () => {
     const ctx = {
       tools: { register: t => registered.push(t) },
       systemPrompt: { section() {}, context() {} },
-      provide() {}, emit() {}, fs: {}, logger: { warn() {} },
+      provide() {}, emit() {}, fs: {}, logger: { warn() {}, info() {} },
+      webServer: { register: () => () => {} },
       on() {}, effect: fn => fn(),
       inject: (names, body) => {
         if (!names.every(n => services[n] !== undefined)) return

@@ -24,13 +24,14 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { anchorNames, selectPages } from './geometry.js'
 import { embedSeal, loadPdf, save, stampPages, stampStraddle } from './pdf.js'
 import { createSelfSigned, DEFAULT_DAYS } from './certificate.js'
+import { CREDENTIAL_DOMAIN, createStore, publicView, readSubmission } from './credential.js'
 import { describeCertificate, describeSignature, hasSignature, signPdf, signerFailureMessage } from './sign.js'
 
 /** Cordis plugin name used by loader diagnostics. */
 const name = 'seal'
 
 /** Services required before `apply` runs. */
-const inject = ['tools', 'fs', 'systemPrompt']
+const inject = ['tools', 'fs', 'systemPrompt', 'webServer']
 
 const Config = Schema.object({
   sealPath: Schema.string().default('').description(
@@ -141,14 +142,20 @@ export function outputPathFor({ input, requested, overwrite }) {
  * @param {Object} options - `{ config, args, env }`.
  * @returns {Object} `{ p12Path, passphrase, passphraseFrom }`
  */
-export function resolveCredential({ config, args, env = process.env }) {
-  const p12Path = (args.p12_path ?? '').trim() || config.p12Path.trim()
+export function resolveCredential({ config, args, env = process.env, stored }) {
+  const p12Path = (args.p12_path ?? '').trim() || (stored?.p12Path ?? '').trim() || config.p12Path.trim()
   if (p12Path.length === 0) {
-    throw new Error('seal: no certificate. Pass p12_path, or set p12Path in the plugin settings. Use seal_cert to make one if you have none.')
+    throw new Error('seal: no certificate. Set one in the client\'s Seal settings, pass p12_path, or set p12Path in the plugin settings. Use seal_cert to make one if you have none.')
   }
 
   if (typeof args.passphrase === 'string' && args.passphrase.length > 0) {
     return { p12Path, passphrase: args.passphrase, passphraseFrom: 'argument' }
+  }
+  // The client-configured credential comes before the config file: it is the
+  // one a person set deliberately in the UI, and it is the only one that is not
+  // sitting in a file that gets synced and shared.
+  if (typeof stored?.passphrase === 'string' && stored.passphrase.length > 0) {
+    return { p12Path, passphrase: stored.passphrase, passphraseFrom: 'client' }
   }
   const variable = config.passphraseEnv.trim()
   if (variable.length > 0) {
@@ -203,6 +210,64 @@ export function refuseIfSigned(bytes) {
  */
 function apply(ctx, config) {
   ctx.systemPrompt.section({ name: 'seal:capability', text: CAPABILITY })
+
+  // The credential set from the client lives in storage rather than in the
+  // profile config. `store` is swapped in when the domain opens; until then it
+  // is memory-only, which keeps the tools usable rather than failing.
+  let store = createStore(undefined)
+  ctx.inject(['storageDomain'], storageCtx => {
+    void storageCtx.storageDomain.open(CREDENTIAL_DOMAIN).then(domain => {
+      storageCtx.effect(() => () => { void domain.close().catch(() => {}) }, 'seal: credential domain')
+      store = createStore(domain.table('signing'))
+    }).catch(error => {
+      ctx.logger?.warn?.(`[seal] the client-set certificate cannot be persisted (${String(error)}); it will be forgotten on restart`)
+    })
+  })
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: '/seal/credential',
+    handler: (req, res) => {
+      void (async () => {
+        const reply = (status, body) => {
+          res.writeHead(status, { 'content-type': 'application/json' })
+          res.end(JSON.stringify(body))
+        }
+
+        if (req.method === 'GET') {
+          // Never the passphrase: a route that returned it would put it in
+          // every browser cache and devtools log that opened the page.
+          reply(200, publicView(await store.read(), { durable: store.durable }))
+          return
+        }
+        if (req.method === 'DELETE') {
+          await store.clear()
+          reply(200, publicView(undefined, { durable: store.durable }))
+          return
+        }
+        if (req.method !== 'POST') {
+          reply(405, { error: 'use GET, POST or DELETE' })
+          return
+        }
+
+        const chunks = []
+        for await (const chunk of req) chunks.push(chunk)
+        let submission
+        try {
+          submission = readSubmission(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'))
+        } catch (error) {
+          reply(400, { error: String(error.message ?? error) })
+          return
+        }
+        await store.write(submission)
+        ctx.logger?.info?.(`[seal] signing certificate set from the client: ${submission.p12Path}`)
+        reply(200, publicView(await store.read(), { durable: store.durable }))
+      })().catch(error => {
+        res.writeHead(500, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: String(error?.message ?? error) }))
+      })
+    },
+  }), 'seal: credential route')
 
   if (config.passphrase.length > 0 && config.passphraseEnv.trim().length === 0) {
     // Said once, at startup, because the file it lands in is easy to forget
@@ -493,7 +558,7 @@ function apply(ctx, config) {
     timeoutMs: 120000,
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      const credential = resolveCredential({ config, args })
+      const credential = resolveCredential({ config, args, stored: await store.read() })
       const { target: pdfTarget, bytes } = await readThroughFs(ctx, args.pdf_path, exec)
       const { bytes: p12Bytes } = await readThroughFs(ctx, credential.p12Path, exec)
 
@@ -535,7 +600,7 @@ function apply(ctx, config) {
 
       // The source, never the value: knowing which credential was used is
       // what makes a wrong-key failure diagnosable.
-      notes.push(`证书 ${credential.p12Path},口令来自${{ argument: '调用参数', settings: '插件设置(明文)', none: '(空)' }[credential.passphraseFrom] ?? `环境变量 ${credential.passphraseFrom}`}。`)
+      notes.push(`证书 ${credential.p12Path},口令来自${{ argument: '调用参数', client: '客户端设置(存储域)', settings: '插件设置(明文)', none: '(空)' }[credential.passphraseFrom] ?? `环境变量 ${credential.passphraseFrom}`}。`)
 
       return {
         output,
