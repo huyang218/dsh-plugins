@@ -167,6 +167,21 @@ export function resolveCredential({ config, args, env = process.env }) {
 }
 
 /**
+ * Whether a page is A4, within a millimetre.
+ *
+ * Flagged in the summary because the commonest "the seal came out wrong" is a
+ * page that is not the size the person assumed — a 40mm seal is correct on A4
+ * and a speck on a page twice that wide, and the coordinates alone look fine.
+ *
+ * @param {number[]} pageMm - `[width, height]` in millimetres.
+ * @returns {boolean} whether it is A4
+ */
+export function isA4(pageMm = []) {
+  const [width, height] = pageMm
+  return Math.abs(width - 210) <= 1 && Math.abs(height - 297) <= 1
+}
+
+/**
  * Refuse to stamp a document that is already signed.
  *
  * Stamping rewrites the file, and the signature then covers bytes that no
@@ -260,6 +275,7 @@ function apply(ctx, config) {
                 page: { type: 'number' },
                 xMm: { type: 'number' },
                 yMm: { type: 'number' },
+                pageMm: { type: 'array', items: { type: 'number' } },
                 overflows: { type: 'array', items: { type: 'string' } },
               },
             },
@@ -271,6 +287,7 @@ function apply(ctx, config) {
           `已盖章:${value.output}`,
           `印章 ${value.seal}(${value.widthMm}×${value.heightMm}mm),共 ${value.stamped.length} 处`,
           ...value.stamped.map(one => `  第 ${one.page} 页 @ (${one.xMm}, ${one.yMm})mm`
+            + (isA4(one.pageMm) ? '' : ` — 页面 ${one.pageMm[0]}×${one.pageMm[1]}mm,不是 A4`)
             + (one.overflows ? ` — 超出页面 ${one.overflows.join('、')} 边` : '')),
           ...value.notes,
         ]

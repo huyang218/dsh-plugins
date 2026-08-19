@@ -47,6 +47,9 @@ seal_stamp(pdf_path, pages="last", anchor="bottom-right", width_mm=40, rotation=
 - **Overflow is reported, not corrected**: a seal that lands off the page names
   the edges it crosses. Nudging it back would put the seal somewhere the signer
   did not choose.
+- **A page that is not A4 is called out**: the commonest cause of a seal looking
+  wrong is a page that is not the size everyone assumed — a 40mm seal is right
+  on A4 and a speck on a page twice as wide, while the coordinates look fine.
 - **Rotation** happens around the anchor, so the reported coordinate is the
   pre-rotation point; check the result when the angle is large.
 

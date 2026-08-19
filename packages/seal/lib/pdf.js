@@ -121,6 +121,10 @@ export async function stampPages({ pdf, seal, pages, anchor, marginMm, xMm, yMm,
       page: index + 1,
       xMm: toMm(position.x),
       yMm: toMm(position.y),
+      // The page's own size, because a seal that looks wrong is usually a page
+      // that is not the size everyone assumed: a 40mm seal is right on A4 and
+      // a speck on a 437mm-wide page, and nothing else in the result says so.
+      pageMm: [toMm(width), toMm(height)],
       ...overflow.length > 0 ? { overflows: overflow } : {},
     })
   }

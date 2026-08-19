@@ -254,3 +254,13 @@ test('stamping needs no certificate, configured or passed', async () => {
     assert.ok((await readFile(output)).length > 0, `${name} wrote nothing`)
   }
 })
+
+test('a page that is not A4 is called out, since that is why a seal looks wrong', () => {
+  // Discovered by testing: a fixture built at 1240x1754 points is 437mm wide,
+  // where a correct 40mm seal looks like a speck — and the coordinates in the
+  // result look perfectly reasonable.
+  assert.equal(plugin.isA4([210, 297]), true)
+  assert.equal(plugin.isA4([210.1, 297.1]), true, 'a fraction of a millimetre is still A4')
+  assert.equal(plugin.isA4([437, 619]), false)
+  assert.equal(plugin.isA4([]), false)
+})
