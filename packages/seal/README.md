@@ -27,6 +27,10 @@ Stamping and signing are done in that order, and it is not interchangeable:
 was made, so stamping a signed file makes every viewer report the document as
 modified — stamping an already-signed file is refused for that reason.
 
+**Stamping needs no certificate.** `seal_stamp` and `seal_straddle` want only a
+seal image; the certificate belongs to `seal_sign`. Stamping without ever
+signing is a complete, supported use.
+
 ### `seal_stamp` — the contract seal
 
 ```

@@ -174,3 +174,83 @@ test('a plaintext passphrase in settings is warned about once, at startup', () =
   plugin.apply(quiet.ctx, new plugin.Config({ passphraseEnv: 'SEAL_PASS' }))
   assert.deepEqual(quietWarnings, [], 'the environment-variable route is the recommended one and says nothing')
 })
+
+/**
+ * A context whose filesystem serves the given files, so a tool can be executed
+ * without touching the real disk for input.
+ * @param {Object} files - path to bytes.
+ * @returns {Object} the context and what was registered
+ */
+function contextOver(files) {
+  const captured = fakeContext()
+  captured.ctx.fs = {
+    resolve: async path => ({ displayPath: path, path }),
+    stat: async path => (files[path.path ?? path] === undefined ? undefined : { type: 'file' }),
+  }
+  return captured
+}
+
+test('stamping needs no certificate, configured or passed', async () => {
+  // The certificate belongs to seal_sign alone. If a credential check ever
+  // migrates to a shared path, sealing a document would start demanding a key
+  // that has nothing to do with drawing an image.
+  const { writeFile, readFile } = await import('node:fs/promises')
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { PDFDocument } = await import('pdf-lib')
+  const { deflateSync } = await import('node:zlib')
+
+  const workspace = mkdtempSync(join(tmpdir(), 'seal-nocert-'))
+  const pdf = await PDFDocument.create()
+  pdf.addPage([595.28, 841.89])
+  pdf.addPage([595.28, 841.89])
+  const pdfPath = join(workspace, 'doc.pdf')
+  await writeFile(pdfPath, await pdf.save())
+
+  // A 2×2 transparent-ish PNG is enough: what is being tested is the absence of
+  // a credential requirement, not the drawing.
+  const side = 2
+  const raw = Buffer.alloc(side * (side * 4 + 1))
+  const crc = buffer => {
+    let value = 0xffffffff
+    for (const byte of buffer) {
+      value ^= byte
+      for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? (value >>> 1) ^ 0xedb88320 : value >>> 1
+    }
+    return (value ^ 0xffffffff) >>> 0
+  }
+  const chunk = (type, body) => {
+    const length = Buffer.alloc(4)
+    length.writeUInt32BE(body.length, 0)
+    const payload = Buffer.concat([Buffer.from(type), body])
+    const check = Buffer.alloc(4)
+    check.writeUInt32BE(crc(payload), 0)
+    return Buffer.concat([length, payload, check])
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(side, 0)
+  header.writeUInt32BE(side, 4)
+  header[8] = 8
+  header[9] = 6
+  const sealPath = join(workspace, 'seal.png')
+  await writeFile(sealPath, Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]))
+
+  const { ctx, tools } = contextOver({ [pdfPath]: true, [sealPath]: true })
+  // Bare config: no p12Path, no passphrase, no sealPath.
+  plugin.apply(ctx, new plugin.Config())
+
+  for (const name of ['seal_stamp', 'seal_straddle']) {
+    const tool = tools.find(one => one.name === name)
+    assert.equal(tool.parameters.p12_path, undefined, `${name} takes no certificate`)
+    const output = join(workspace, `${name}.pdf`)
+    const value = await tool.execute({ pdf_path: pdfPath, seal_path: sealPath, output_path: output }, { signal: undefined })
+    assert.equal(value.output, output)
+    assert.ok((await readFile(output)).length > 0, `${name} wrote nothing`)
+  }
+})
