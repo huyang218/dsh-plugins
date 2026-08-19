@@ -30,8 +30,16 @@ import { describeCertificate, describeSignature, hasSignature, signPdf, signerFa
 /** Cordis plugin name used by loader diagnostics. */
 const name = 'seal'
 
-/** Services required before `apply` runs. */
-const inject = ['tools', 'fs', 'systemPrompt', 'webServer']
+/**
+ * Services required before `apply` runs.
+ *
+ * `webServer` is deliberately NOT here. It is needed only by the client's
+ * settings route, and a top-level declaration makes the whole plugin wait for
+ * it — on a profile with no web server (headless, CLI) the entry never
+ * activates and boot fails with "waiting for service: webServer", taking
+ * stamping and signing down with it. It is injected around the route instead.
+ */
+const inject = ['tools', 'fs', 'systemPrompt']
 
 const Config = Schema.object({
   sealPath: Schema.string().default('').description(
@@ -209,7 +217,9 @@ export function refuseIfSigned(bytes) {
  * @param {Object} config - the validated configuration.
  */
 function apply(ctx, config) {
-  ctx.systemPrompt.section({ name: 'seal:capability', text: CAPABILITY })
+  // `order` is required and must be finite — the service throws without it,
+  // and a throw in apply() takes the whole plugin tree down at startup.
+  ctx.systemPrompt.section({ name: 'seal:capability', order: 160, text: CAPABILITY })
 
   // The credential set from the client lives in storage rather than in the
   // profile config. `store` is swapped in when the domain opens; until then it
@@ -224,7 +234,8 @@ function apply(ctx, config) {
     })
   })
 
-  ctx.effect(() => ctx.webServer.register({
+  ctx.inject(['webServer'], webCtx => {
+    webCtx.effect(() => webCtx.webServer.register({
     kind: 'prefix',
     path: '/seal/credential',
     handler: (req, res) => {
@@ -267,7 +278,8 @@ function apply(ctx, config) {
         res.end(JSON.stringify({ error: String(error?.message ?? error) }))
       })
     },
-  }), 'seal: credential route')
+    }), 'seal: credential route')
+  })
 
   if (config.passphrase.length > 0 && config.passphraseEnv.trim().length === 0) {
     // Said once, at startup, because the file it lands in is easy to forget

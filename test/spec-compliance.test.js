@@ -33,6 +33,23 @@ function packages() {
 
 const all = packages()
 
+/**
+ * The invariant the real prompt service enforces, mirrored here.
+ *
+ * `systemPrompt.section()` throws on a non-finite `order`, and a throw inside
+ * apply() fails the entire plugin tree at startup — the service exits with
+ * code 1 and the desktop shell blames whichever plugin was installed last.
+ * A fake context that accepts anything lets that ship: this exact omission
+ * reached a release and only surfaced when the service refused to boot.
+ *
+ * @param {Object} section - what the plugin registered.
+ * @param {string} owner - the package, for the message.
+ */
+function assertSection(section, owner) {
+  assert.ok(Number.isFinite(section?.order),
+    `${owner}: prompt section "${section?.name}" has no finite order; the real service throws and startup fails`)
+}
+
 test('the repo has packages to check', () => {
   assert.ok(all.length >= 1, 'discovery found nothing — the layout changed')
 })
@@ -112,7 +129,7 @@ test('tool plugins keep their canonical values honest', async () => {
     const sections = []
     const ctx = {
       tools: { register: t => registered.push(t) },
-      systemPrompt: { section: s => sections.push(s), context() {} },
+      systemPrompt: { section: s => { assertSection(s, pkg.name); sections.push(s) }, context() {} },
       // A tools/ plugin may also provide a service and reach for another —
       // the vision tool provides its bridge and resolves the sandboxed fs —
       // and a harness missing those fails the plugin for the harness's own gap.
@@ -173,7 +190,7 @@ test('a tool whose summary hides rows says so', async () => {
     }
     const ctx = {
       tools: { register: t => registered.push(t) },
-      systemPrompt: { section() {}, context() {} },
+      systemPrompt: { section: s => assertSection(s, pkg.name), context() {} },
       provide() {}, emit() {}, fs: {}, logger: { warn() {}, info() {} },
       webServer: { register: () => () => {} },
       on() {}, effect: fn => fn(),

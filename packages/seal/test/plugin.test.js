@@ -23,7 +23,10 @@ test('the plugin exports the named shape a loader entry needs', () => {
   assert.equal('default' in plugin, false)
   assert.equal(plugin.name, 'seal')
   assert.equal(typeof plugin.apply, 'function')
-  assert.deepEqual(plugin.inject, ['tools', 'fs', 'systemPrompt', 'webServer'])
+  // webServer is NOT here: it is needed only by the client's settings route,
+  // and a top-level declaration makes a profile without a web server fail to
+  // boot with "waiting for service: webServer" — stamping included.
+  assert.deepEqual(plugin.inject, ['tools', 'fs', 'systemPrompt'])
 })
 
 test('all four tools are registered, with schemas a closed output demands', () => {
@@ -295,9 +298,12 @@ async function callRoute(route, method, body) {
 test('the client can set, read back and clear the signing credential', async () => {
   const { ctx, tools } = fakeContext()
   const routes = []
-  ctx.webServer = { register: spec => { routes.push(spec); return () => {} } }
   ctx.effect = fn => fn()
-  ctx.inject = () => {}
+  // The route lives inside a nested inject, the way the plugin registers it.
+  ctx.inject = (names, body) => {
+    if (!names.includes('webServer')) return
+    body({ ...ctx, webServer: { register: spec => { routes.push(spec); return () => {} } }, effect: fn => fn() })
+  }
   plugin.apply(ctx, new plugin.Config())
 
   assert.equal(tools.length, 4)
@@ -326,9 +332,11 @@ test('the client can set, read back and clear the signing credential', async () 
 test('the route refuses a public certificate and an unknown method', async () => {
   const { ctx } = fakeContext()
   const routes = []
-  ctx.webServer = { register: spec => { routes.push(spec); return () => {} } }
   ctx.effect = fn => fn()
-  ctx.inject = () => {}
+  ctx.inject = (names, body) => {
+    if (!names.includes('webServer')) return
+    body({ ...ctx, webServer: { register: spec => { routes.push(spec); return () => {} } }, effect: fn => fn() })
+  }
   plugin.apply(ctx, new plugin.Config())
   const route = routes[0]
 
@@ -337,4 +345,14 @@ test('the route refuses a public certificate and an unknown method', async () =>
   assert.match(refused.value.error, /public half/)
 
   assert.equal((await callRoute(route, 'PUT', {})).status, 405)
+})
+
+test('without a web server the tools still work', () => {
+  // A profile with no web server (headless, CLI) must still stamp and sign.
+  // Declaring webServer at the top level made the entry never activate there,
+  // and boot failed with "waiting for service: webServer".
+  const { ctx, tools } = fakeContext()
+  ctx.inject = () => {}   // nothing provides webServer
+  assert.doesNotThrow(() => plugin.apply(ctx, new plugin.Config()))
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['seal_cert', 'seal_sign', 'seal_stamp', 'seal_straddle'])
 })

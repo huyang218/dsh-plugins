@@ -649,6 +649,9 @@ export function apply(ctx, config) {
   // absent: the model has to be able to choose its route before it commits.
   ctx.systemPrompt.section({
     name: 'vision:endpoint',
+    // Required, and must be finite: the service throws otherwise, and a throw
+    // in apply() fails the whole plugin tree at startup.
+    order: 158,
     text: configured
       ? 'Image understanding: the `vision` tool sends an image file to ' + route.model
         + ' (' + route.label + ') and returns what that model reports. '
