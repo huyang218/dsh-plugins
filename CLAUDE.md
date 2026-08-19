@@ -96,7 +96,10 @@ cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
   - **加密 PDF 直接拒绝**:pdf-lib 加 `ignoreEncryption` 能打开,但写回时保护就没了——"盖章成功"等于顺手去掉了密码。本包从不传那个 flag,并在错误信息里说明。
   - **越界不自动纠正、旋转要说明**:章跑出页面只报告是哪几条边(挪回来 = 盖在签署人没选的位置);pdf-lib 绕锚点旋转,所以报告的坐标是旋转前的,越界检查也是按未旋转方框算的,有旋转时结果里明确提示。
   - **默认不覆盖原件**(`overwrite: false`,输出 `<原名>.sealed.pdf`):盖章不可逆,未盖章的原件正是出事时用来比对的。
-  - 验证方式:单测用 zlib 手工造带 alpha 的 PNG + 造多页 PDF,盖完解压 content stream 断言 `W n` 裁剪存在、`cm` 矩阵逐页左移正好一条;另外真实渲染过一份 4 页合同,把四页右边缘按真实条宽拼起来确认能还原成完整一枚章。
+  - **`seal_sign` 做真正的 PAdES 签名**(`lib/sign.js`,`@signpdf` + `node-forge`):对整个文件的 CMS 签名。三条铁律:①**顺序不可换,先盖章最后签**——签名覆盖的是签那一刻的字节,对已签名文件盖章会让每个阅读器报「文档已被修改」,所以**两个盖章工具都先 `refuseIfSigned`**;②**只能签一次**(pdf-lib 是整文件重写不是增量更新,再签会毁掉第一个签名),多方会签需要能做 incremental update 的工具,如实说明而不是假装支持;③**签名的分量取决于证书**,结果里报出 subject/issuer/是否自签/有效期——自签证书是「某个持有该密钥的人签的」,密码学有效但不证明身份。
+  - `pdflibAddPlaceholder` 之后必须 `save({ useObjectStreams: false })`:ByteRange 是靠扫描文件找占位符算出来的,压进对象流就找不到了。
+  - **验证方式(不是自证)**:单测用 openssl 现造自签 p12(私钥不进仓库),签完交给 **`pdfsig`(poppler)独立验签**,断言 `Signature is Valid` + `Total document signed`;再翻转一个字节,断言变成 `Digest Mismatch`。`pdfsig` 对无效签名**以非零码退出**,execFileSync 会抛,要从 `error.stdout` 里读结论。openssl / pdfsig 缺席时该用例 skip。
+  - 盖章部分的验证:单测用 zlib 手工造带 alpha 的 PNG + 多页 PDF,盖完解压 content stream 断言 `W n` 裁剪存在、`cm` 矩阵逐页左移正好一条;另外真实渲染过一份 4 页合同,把四页右边缘按真实条宽拼起来确认能还原成完整一枚章。
 
 - **im**(`packages/im`,自研):聊天软件驱动 agent——飞书 / 企业微信 / 钉钉 / QQ 发一条消息就跑一次真实回合,回复回到同一个聊天;每个聊天一个持久会话(chat→session 映射存 storage 域,没后端就退化为内存)。分层:`lib/policy.js`(纯判断:白名单、去重、命令解析、回复分段、assistant 文本提取)、`lib/protocols.js`(纯协议:各家验签/载荷/帧编解码)、`lib/channels.js`(传输:HTTP 路由、WebSocket 保活、token 缓存)、`lib/bridge.js`(宿主集成)。几条必须记住的事实:
   - **宿主投递 prompt 的路径**(从已装 dsh 源码读出,不是猜):`ctx.agents.create({ sessionId, agentOptions, meta:{cwd,agentPreset}, setup })` / `ctx.agents.get(id)`;投消息 `agent.followup(createUserMessage({content,source:{kind:'user'}}))`(`createUserMessage` 来自 `@deepseek-ai/dsh-llm`),插队 `agent.steer(...)`,取消 `agent.cancel({kind:'user'},{keepInbox:true})`;收回复订阅 `session/event` 看 `assistant/message` 与 `turn/end`;预设 `agentPresets.resolve(id)` + `.mount(agentCtx,id)`。

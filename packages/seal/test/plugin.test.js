@@ -24,11 +24,11 @@ test('the plugin exports the named shape a loader entry needs', () => {
   assert.deepEqual(plugin.inject, ['tools', 'fs', 'systemPrompt'])
 })
 
-test('both stamps are registered, with schemas a closed output demands', () => {
+test('all three tools are registered, with schemas a closed output demands', () => {
   const { ctx, tools } = fakeContext()
   plugin.apply(ctx, new plugin.Config())
 
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ['seal_stamp', 'seal_straddle'])
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['seal_sign', 'seal_stamp', 'seal_straddle'])
   for (const tool of tools) {
     assert.ok(tool.output.schema, `${tool.name} declares an output schema`)
     assert.equal(typeof tool.output.render, 'function')
@@ -48,26 +48,34 @@ test('both stamps are registered, with schemas a closed output demands', () => {
   }
 })
 
-test('the model is told what a stamped image is not, before it can stamp', () => {
-  // The assumption this exists to break: that a seal on a PDF is a signature.
+test('the model is told what a stamp is not, and in which order to work', () => {
+  // Two assumptions this exists to break: that a seal on a PDF is a signature,
+  // and that stamping a signed document is harmless. The second is silent —
+  // the file still opens, and every viewer calls it modified.
   const { ctx, sections } = fakeContext()
   plugin.apply(ctx, new plugin.Config())
 
   assert.deepEqual(sections.map(section => section.name), ['seal:capability'])
   const text = sections[0].text
-  assert.match(text, /not an electronic signature/)
+  assert.match(text, /That is not a signature/)
   assert.match(text, /电子签名法/)
-  assert.match(text, /certificate/)
-  assert.match(text, /do not draw or invent a seal/, 'the seal is the user\'s own, not generated')
+  assert.match(text, /stamp first, sign last/i)
+  assert.match(text, /self-signed certificate produces a valid signature by an unidentified/)
+  assert.match(text, /Only ONE signature/)
+  assert.match(text, /do not draw a seal or\n?issue a certificate/, 'neither seals nor certificates are invented')
 })
 
-test('both tool descriptions repeat the limit, since a description is what the model reads', () => {
+test('each tool description carries its own limit, since that is what the model reads', () => {
   const { ctx, tools } = fakeContext()
   plugin.apply(ctx, new plugin.Config())
-  for (const tool of tools) {
-    assert.match(tool.description, /RENDERS an image only|not an electronic signature|not make the document cryptographically/,
-      `${tool.name} does not say what it is not`)
+  const by = name => tools.find(tool => tool.name === name).description
+
+  for (const name of ['seal_stamp', 'seal_straddle']) {
+    assert.match(by(name), /RENDERS an image only|not an electronic signature|not make the document cryptographically/,
+      `${name} does not say that it is not a signature`)
   }
+  assert.match(by('seal_sign'), /Sign LAST/, 'the ordering rule belongs on the tool that depends on it')
+  assert.match(by('seal_sign'), /self-signed/, 'the trust limit is on the tool too')
 })
 
 test('the output goes beside the original unless told otherwise', () => {
@@ -93,4 +101,15 @@ test('the default seal size is a real seal size', () => {
   assert.equal(config.sealPath, '', 'no seal is assumed; it is the user\'s own file')
   assert.equal(config.overwrite, false)
   assert.ok(config.maxPagesPerSeal >= 2)
+})
+
+test('stamping an already-signed document is refused, not quietly done', () => {
+  // Stamping rewrites the file, so the existing signature ends up covering
+  // bytes that no longer exist: every viewer then reports the document as
+  // modified, and the party who signed gets blamed for a change they did not
+  // make.
+  const signed = Buffer.from('%PDF-1.7\n/Type /Sig\n/ByteRange [0 100 200 300]\n')
+  assert.throws(() => plugin.refuseIfSigned(signed), /already signed/)
+  assert.throws(() => plugin.refuseIfSigned(signed), /Stamp the unsigned original/)
+  assert.doesNotThrow(() => plugin.refuseIfSigned(Buffer.from('%PDF-1.7\nplain\n')))
 })

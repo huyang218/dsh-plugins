@@ -43,7 +43,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | [astock](packages/astock) | A 股行情、K 线、技术指标、全市场筛选、财报、资金流、可转债——免费,少数工具需 Tushare token | `dsh-plugin-astock` |
 | [vision](packages/vision) | 让纯文本 agent 中途调用多模态模型——Qwen / Kimi / OpenAI / Claude / Gemini,返回结构化证据而不是散文 | `dsh-plugin-vision` |
 | [ainfo](packages/ainfo) | A 股新闻、券商研报、业绩预告、分红、股东增减持、十大股东——需 Tushare token | `dsh-plugin-ainfo` |
-| [seal](packages/seal) | 给 PDF 盖章——指定页面盖合同章,以及按页数等分的骑缝章。盖的是图片,不是电子签名 | `dsh-plugin-seal` |
+| [seal](packages/seal) | 给 PDF 盖章并签名——合同章、骑缝章,以及用你的证书对整个文件做 PAdES 数字签名 | `dsh-plugin-seal` |
 | [aportfolio](packages/aportfolio) | 跨会话记住持仓与自选,实时估值,给出盈亏、占比与目标价触发 | `dsh-plugin-aportfolio` |
 
 **`runtime/` — 围绕 harness 的行为,模型看不见**

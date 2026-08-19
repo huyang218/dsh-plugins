@@ -23,6 +23,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { anchorNames, selectPages } from './geometry.js'
 import { embedSeal, loadPdf, save, stampPages, stampStraddle } from './pdf.js'
+import { describeCertificate, describeSignature, hasSignature, signPdf, signerFailureMessage } from './sign.js'
 
 /** Cordis plugin name used by loader diagnostics. */
 const name = 'seal'
@@ -55,18 +56,31 @@ const Config = Schema.object({
 
 /** The paragraph the model gets before it can call either tool. */
 const CAPABILITY = [
-  'PDF sealing: `seal_stamp` puts a seal image on chosen pages (合同章); `seal_straddle` divides one',
-  'seal across the edges of a group of pages (骑缝章) so a removed or swapped page leaves a gap.',
+  'PDF sealing and signing. Three tools, and the difference between them decides what the document',
+  'is worth:',
   '',
-  'State this whenever sealing comes up, and never imply otherwise: these tools RENDER a seal image.',
-  'That is not an electronic signature. It binds no identity and detects no later edit — anyone with',
-  'the file can copy the image onto another document. Under 《电子签名法》 a reliable electronic',
-  'signature additionally needs a certificate binding the signer and a cryptographic signature over',
-  'the document. If the user needs the document to hold up in a dispute, say that the image alone',
-  'will not, and that it has to be signed by a CA-issued certificate as well.',
+  '  `seal_stamp` draws a seal image on chosen pages (合同章).',
+  '  `seal_straddle` divides one seal across the page edges of a group (骑缝章), so a removed or',
+  '  swapped page leaves a gap.',
+  '  `seal_sign` adds a PAdES digital signature: a CMS signature over the whole file, from the',
+  '  user\'s PKCS#12 certificate.',
   '',
-  'The seal image is supplied by the user — their own seal, as a PNG with a transparent background.',
-  'These tools do not draw or invent a seal for an organisation.',
+  'The two stamps RENDER AN IMAGE. That is not a signature: it binds no identity and detects no',
+  'later edit — anyone with the file can copy the image onto another document. Only `seal_sign`',
+  'makes the document verifiable, and only 《电子签名法》-grade when the certificate comes from a CA',
+  'the other side trusts. A self-signed certificate produces a valid signature by an unidentified',
+  'party; say so rather than calling it signed.',
+  '',
+  'ORDER MATTERS, and getting it wrong is silent: stamp first, sign last. A signature covers the',
+  'bytes that existed when it was made, so stamping a signed file makes every viewer report the',
+  'document as modified. If the user asks to stamp something already signed, say that it will break',
+  'the signature and offer to stamp the unsigned original and sign again.',
+  '',
+  'Only ONE signature can be added this way. A second signature rewrites the file and invalidates',
+  'the first, so counter-signing by another party needs a tool that appends an incremental update.',
+  '',
+  'The seal image and the certificate are supplied by the user. These tools do not draw a seal or',
+  'issue a certificate for an organisation.',
 ].join('\n')
 
 /**
@@ -100,7 +114,22 @@ export function outputPathFor({ input, requested, overwrite }) {
 }
 
 /**
- * Register both tools.
+ * Refuse to stamp a document that is already signed.
+ *
+ * Stamping rewrites the file, and the signature then covers bytes that no
+ * longer exist — every viewer reports the document as modified, and the party
+ * who signed it gets blamed for a change they did not make. The fix is to stamp
+ * the unsigned original and sign again, which the message says.
+ *
+ * @param {Uint8Array} bytes - the document about to be stamped.
+ */
+export function refuseIfSigned(bytes) {
+  if (!hasSignature(bytes)) return
+  throw new Error('seal: this PDF is already signed, and stamping it would invalidate that signature — every viewer would report the document as modified. Stamp the unsigned original instead, then sign the result.')
+}
+
+/**
+ * Register the three tools.
  * @param {Object} ctx - the plugin context.
  * @param {Object} config - the validated configuration.
  */
@@ -193,6 +222,7 @@ function apply(ctx, config) {
     isConcurrencySafe: () => false,
     async execute(args, exec) {
       const { target: pdfTarget, bytes } = await readThroughFs(ctx, args.pdf_path, exec)
+      refuseIfSigned(bytes)
       const pdf = await loadPdf(bytes)
       const seal = await sealFor(pdf, args.seal_path, exec)
       const pages = selectPages(args.pages ?? 'last', pdf.getPageCount())
@@ -288,6 +318,7 @@ function apply(ctx, config) {
     isConcurrencySafe: () => false,
     async execute(args, exec) {
       const { target: pdfTarget, bytes } = await readThroughFs(ctx, args.pdf_path, exec)
+      refuseIfSigned(bytes)
       const pdf = await loadPdf(bytes)
       if (pdf.getPageCount() < 2) {
         throw new Error('seal: a straddle seal needs at least two pages — on a single page it is just a seal at the edge.')
@@ -325,6 +356,111 @@ function apply(ctx, config) {
         heightMm: result.heightMm,
         groups: result.groups,
         sliceMm: result.drawn[0]?.sliceMm ?? 0,
+        notes,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'seal_sign',
+    description:
+      'Add a PAdES digital signature to a PDF using the user\'s PKCS#12 (.p12/.pfx) certificate. '
+      + 'This is the part that makes a document verifiable: the signature covers the whole file, so '
+      + 'any later edit — including adding a seal image — is detectable, and the certificate says who '
+      + 'signed. Sign LAST, after any stamping. Only one signature can be added this way; a second '
+      + 'would invalidate the first. A self-signed certificate yields a valid signature by an '
+      + 'unidentified party, which is reported rather than glossed over.',
+    parameters: {
+      pdf_path: { type: 'string', required: true, description: 'The PDF to sign — already stamped, if it is to be stamped.' },
+      p12_path: { type: 'string', required: true, description: 'The PKCS#12 bundle holding the private key and its certificate.' },
+      passphrase: { type: 'string', description: 'The passphrase for that bundle.' },
+      reason: { type: 'string', description: 'Why it was signed; shown by PDF viewers.' },
+      signer_name: { type: 'string', description: 'The name recorded in the signature dictionary.' },
+      location: { type: 'string', description: 'Where it was signed.' },
+      contact: { type: 'string', description: 'Contact recorded in the signature.' },
+      output_path: { type: 'string', description: 'Where to write. Defaults to <input>.signed.pdf.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          output: { type: 'string' },
+          pdf: { type: 'string' },
+          coversWholeFile: { type: 'boolean' },
+          certificate: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              subject: { type: 'string' },
+              issuer: { type: 'string' },
+              selfSigned: { type: 'boolean' },
+              notAfter: { type: 'string' },
+              expired: { type: 'boolean' },
+            },
+          },
+          notes: { type: 'array', items: { type: 'string' } },
+        },
+      },
+      render: (_args, value) => {
+        const cert = value.certificate
+        return [{ type: 'text', text: [
+          `已签名:${value.output}`,
+          `签署人证书:${cert.subject}`,
+          `签发者:${cert.issuer}${cert.selfSigned ? '(自签,不代表任何经核实的身份)' : ''}`,
+          `有效期至 ${cert.notAfter}${cert.expired ? '(已过期)' : ''}`,
+          value.coversWholeFile ? '签名覆盖整个文件:此后任何改动都会被验签工具发现。' : '⚠ 签名未覆盖整个文件,请勿使用这份结果。',
+          ...value.notes,
+        ].join('\n') }]
+      },
+    },
+    timeoutMs: 120000,
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      const { target: pdfTarget, bytes } = await readThroughFs(ctx, args.pdf_path, exec)
+      const { target: p12Target, bytes: p12Bytes } = await readThroughFs(ctx, args.p12_path, exec)
+
+      if (hasSignature(bytes)) {
+        // Signing again rewrites the file, and the first signature then reads
+        // as broken to every viewer. Refusing beats handing back a document
+        // whose existing signature was quietly destroyed.
+        throw new Error('seal: this PDF is already signed. Signing it again here rewrites the file and invalidates the existing signature — counter-signing needs a tool that appends an incremental update.')
+      }
+
+      let certificate
+      try {
+        certificate = describeCertificate(p12Bytes, args.passphrase ?? '')
+      } catch (error) {
+        throw new Error(signerFailureMessage(error))
+      }
+
+      const signed = await signPdf({
+        pdfBytes: bytes,
+        p12Bytes,
+        passphrase: args.passphrase ?? '',
+        reason: args.reason,
+        name: args.signer_name,
+        location: args.location,
+        contactInfo: args.contact,
+      })
+
+      const output = outputPathFor({ input: pdfTarget.displayPath, requested: args.output_path, overwrite: false })
+      await writeFile(output, signed)
+
+      const described = describeSignature(signed)
+      const notes = []
+      if (certificate.selfSigned) {
+        notes.push('证书是自签的:签名在密码学上有效,但不证明签署人是谁。要让对方认,需要受信任 CA 签发的证书。')
+      }
+      if (certificate.expired) notes.push('证书已过期:多数阅读器会对这份签名给出警告。')
+      notes.push('此后不要再对这个文件盖章或编辑——那会让签名失效。要盖章就回到未签名的原件,盖完再签。')
+      notes.push(`用 pdfsig 或 Adobe Reader 可独立验签:签名覆盖 ${described.byteRange?.[3] === undefined ? '未知' : '整个文件'}。`)
+
+      return {
+        output,
+        pdf: pdfTarget.displayPath,
+        coversWholeFile: described.coversWholeFile === true,
+        certificate,
         notes,
       }
     },

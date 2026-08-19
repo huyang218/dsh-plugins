@@ -2,26 +2,30 @@
 
 English · [中文](README.zh.md)
 
-Put a company seal on a PDF: a **contract seal** (合同章) on chosen pages, and a
-**straddle seal** (骑缝章) divided across the edge of every page, so that a page
-removed, inserted or swapped leaves a gap when the pages are laid out.
+Seal and sign a PDF: a **contract seal** (合同章) on chosen pages, a **straddle
+seal** (骑缝章) divided across every page edge so a swapped page leaves a gap,
+and a **PAdES digital signature** over the whole file from your own certificate.
 
 > [!WARNING]
-> **What gets stamped is an image, not an electronic signature.** It binds no
-> identity and detects no later edit — anyone holding the file can lift the seal
-> and put it on another document. A reliable electronic signature under Chinese
-> law (《电子签名法》) additionally needs a CA-issued certificate binding the
-> signer and a cryptographic signature over the document's bytes (PAdES).
+> **Stamping and signing are different things.** A stamped seal is an image: it
+> binds no identity and detects no later edit — anyone holding the file can lift
+> it onto another document. A reliable electronic signature under Chinese law
+> (《电子签名法》) needs a certificate binding the signer and a cryptographic
+> signature over the bytes, which is what `seal_sign` does.
 >
-> This plugin renders the seal people expect to see; a document that has to hold
-> up in a dispute must also be *signed*. That paragraph is registered into the
-> system prompt, so the model knows it before it can call either tool and does
-> not describe stamping as signing.
+> The division is clean: **the seal is for people, the signature is for
+> verifiers.** That paragraph is registered into the system prompt, so the model
+> knows it before it can call anything and does not describe stamping as signing.
 
-The seal image is **yours** — a PNG with a transparent background. Neither tool
-draws or invents a seal for an organisation.
+The seal image and the certificate are **yours**. These tools neither draw a
+seal nor issue a certificate for an organisation.
 
-## The two tools
+## The three tools
+
+Stamping and signing are done in that order, and it is not interchangeable:
+**stamp first, sign last.** A signature covers the bytes that existed when it
+was made, so stamping a signed file makes every viewer report the document as
+modified — stamping an already-signed file is refused for that reason.
 
 ### `seal_stamp` — the contract seal
 
@@ -61,13 +65,38 @@ page's slice. The alternative — drawing it off the page edge and letting the
 page box hide the rest — leaves the rest of the seal in the file, where it can
 be extracted. That is not hidden.
 
+### `seal_sign` — the PAdES signature
+
+```
+seal_sign(pdf_path, p12_path, passphrase, reason="Approved")
+```
+
+Signs the **whole file** with a CMS signature from your PKCS#12 (`.p12`/`.pfx`)
+certificate. This is the part with legal weight: any later edit — including
+another stamp — is detectable, and the certificate says who signed.
+
+- **Last, always.** Stamping a signed file appends bytes the signature does not
+  cover. Stamping an already-signed document is refused, pointing back at the
+  unsigned original.
+- **Once.** A second signature through this path rewrites the file and
+  invalidates the first. Counter-signing by another party needs a tool that
+  appends an incremental update; this plugin says so rather than pretending.
+- **Worth what the certificate is worth.** The result reports the subject, the
+  issuer, whether it is **self-signed**, and the expiry. A self-signed
+  certificate makes a cryptographically valid signature by an *unidentified*
+  party — it proves someone holding that key signed, not who they are.
+
+Don't take our word for the result: `pdfsig` (from poppler) or Adobe Reader
+verify it independently.
+
 ## Install
 
 ```sh
 dsh plugin --profile web add dsh-plugin-seal
 ```
 
-Then point `sealPath` at your seal PNG in the plugin settings.
+Then point `sealPath` at your seal PNG in the plugin settings; the signing
+certificate is passed per call.
 
 ## Config
 
@@ -92,12 +121,17 @@ unsealed original is what a dispute gets compared against; the result goes to
 - **A JPEG seal** still works but is flagged: JPEG has no transparency, so the
   seal arrives as a red circle in a white box that hides the clause under it.
 - **A straddle seal on a single page.** There is no seam to straddle.
+- **Stamping or re-signing an already-signed file.** Either would invalidate the
+  signature it already carries.
 
 ## Dependency
 
-This package uses [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT) — the only
-runtime dependency in this repository. Hand-writing a PDF writer to avoid it
-would put an unproven implementation between people and the documents they sign.
+This package uses [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT) for the
+PDF work and [@signpdf](https://github.com/vbuch/node-signpdf) (MIT) with
+[node-forge](https://github.com/digitalbazaar/forge) (BSD-3) for the PAdES
+signature and certificate parsing — the only runtime dependencies in this
+repository. Hand-writing a PDF writer or a CMS signer to avoid them would put
+unproven code between people and the documents they sign.
 
 ## Licence
 
