@@ -25,6 +25,7 @@ import { anchorNames, selectPages } from './geometry.js'
 import { embedSeal, loadPdf, save, stampPages, stampStraddle } from './pdf.js'
 import { createSelfSigned, DEFAULT_DAYS } from './certificate.js'
 import { CREDENTIAL_DOMAIN, createStore, publicView, readSubmission } from './credential.js'
+import { findSoffice, isConvertible, isPdf, missingConverterMessage, toPdf } from './convert.js'
 import { describeCertificate, describeSignature, hasSignature, signPdf, signerFailureMessage } from './sign.js'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -58,6 +59,11 @@ const Config = Schema.object({
   maxPagesPerSeal: Schema.number().default(20).description(
     '一枚骑缝章最多跨多少页。60 页的合同盖一枚章,每页只有不到 1 毫米宽的一条,'
     + '看不出也证明不了什么;线下做法同样是分批盖,这个值就是那个批量。',
+  ),
+  sofficePath: Schema.string().default('').description(
+    'LibreOffice 可执行文件路径,用于把 Word 文档转成 PDF。留空则自动在常见位置和 PATH 里找'
+    + '(macOS 通常是 `/Applications/LibreOffice.app/Contents/MacOS/soffice`)。没装就用不了转换,'
+    + '工具会明说,而不是悄悄失败。',
   ),
   p12Path: Schema.string().default('').description(
     '默认签名证书(PKCS#12,`.p12` / `.pfx`)的路径。配了它,`seal_sign` 就不必每次传 p12_path。'
@@ -93,6 +99,12 @@ const CAPABILITY = [
   'makes the document verifiable, and only 《电子签名法》-grade when the certificate comes from a CA',
   'the other side trusts. A self-signed certificate produces a valid signature by an unidentified',
   'party; say so rather than calling it signed.',
+  '',
+  'A seal goes on a PDF. A Word document (.docx/.doc/.odt/.rtf) must be converted first with',
+  '`seal_to_pdf`, and that is a deliberate step, not a detail: conversion substitutes fonts and moves',
+  'pagination, and AFTER IT THE PDF IS THE DOCUMENT — it is what gets stamped, signed and disputed.',
+  'Tell the user that the converted PDF, not their .docx, is what they are sealing, and keep the',
+  'original.',
   '',
   'ORDER MATTERS, and getting it wrong is silent: stamp first, sign last. A signature covers the',
   'bytes that existed when it was made, so stamping a signed file makes every viewer report the',
@@ -194,6 +206,22 @@ export function resolveCredential({ config, args, env = process.env, stored }) {
 export function isA4(pageMm = []) {
   const [width, height] = pageMm
   return Math.abs(width - 210) <= 1 && Math.abs(height - 297) <= 1
+}
+
+/**
+ * Refuse a document that is not a PDF, naming the way forward.
+ *
+ * A bare "not a PDF" would be true and useless: the file someone wants sealed
+ * is almost always a .docx, and the answer is one tool call away.
+ *
+ * @param {string} path - the requested input.
+ */
+export function refuseIfNotPdf(path) {
+  if (isPdf(path)) return
+  if (isConvertible(path)) {
+    throw new Error(`seal: "${path}" is not a PDF. Convert it first with seal_to_pdf — and tell the user that the converted PDF, not the original document, is what gets sealed and signed.`)
+  }
+  throw new Error(`seal: "${path}" is not a PDF, and not a document type that can be converted (.docx/.doc/.odt/.rtf).`)
 }
 
 /**
@@ -374,6 +402,7 @@ function apply(ctx, config) {
     timeoutMs: 120000,
     isConcurrencySafe: () => false,
     async execute(args, exec) {
+      refuseIfNotPdf(args.pdf_path)
       const { target: pdfTarget, bytes } = await readThroughFs(ctx, args.pdf_path, exec)
       refuseIfSigned(bytes)
       const pdf = await loadPdf(bytes)
@@ -470,6 +499,7 @@ function apply(ctx, config) {
     timeoutMs: 120000,
     isConcurrencySafe: () => false,
     async execute(args, exec) {
+      refuseIfNotPdf(args.pdf_path)
       const { target: pdfTarget, bytes } = await readThroughFs(ctx, args.pdf_path, exec)
       refuseIfSigned(bytes)
       const pdf = await loadPdf(bytes)
@@ -570,6 +600,7 @@ function apply(ctx, config) {
     timeoutMs: 120000,
     isConcurrencySafe: () => false,
     async execute(args, exec) {
+      refuseIfNotPdf(args.pdf_path)
       const credential = resolveCredential({ config, args, stored: await store.read() })
       const { target: pdfTarget, bytes } = await readThroughFs(ctx, args.pdf_path, exec)
       const { bytes: p12Bytes } = await readThroughFs(ctx, credential.p12Path, exec)
@@ -693,6 +724,68 @@ function apply(ctx, config) {
           '这是自签证书:签名在密码学上有效,但它本身不证明你是谁。要让对方的阅读器认,把 .cer 交给对方并请其信任(核对指纹)。',
           '.p12 里有私钥,谁拿到谁就能以你的名义签署——不要发给任何人,也不要放进代码仓库。已按 0600 权限写入。',
           '需要陌生人或法庭直接采信,得用受信任 CA 签发的证书;TLS 证书(Let\'s Encrypt 之类)不能用于文档签名。',
+        ],
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'seal_to_pdf',
+    description:
+      'Convert a Word or OpenDocument file (.docx/.doc/.odt/.rtf) to PDF with LibreOffice, so it can '
+      + 'be sealed and signed. This is a deliberate step and worth saying out loud to the user: '
+      + 'conversion substitutes fonts and can move pagination, and afterwards THE PDF IS THE DOCUMENT '
+      + '— it is what gets stamped, signed and disputed. The original file is kept.',
+    parameters: {
+      input_path: { type: 'string', required: true, description: 'The .docx/.doc/.odt/.rtf to convert.' },
+      output_path: { type: 'string', description: 'Where to write the PDF. Defaults to the same name beside the original.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          output: { type: 'string' },
+          source: { type: 'string' },
+          pages: { type: 'number' },
+          converter: { type: 'string' },
+          notes: { type: 'array', items: { type: 'string' } },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: [
+        `已转换:${value.source} → ${value.output}(${value.pages} 页)`,
+        ...value.notes,
+      ].join('\n') }],
+    },
+    // LibreOffice is slow to start and refuses to run twice against one user
+    // profile, so this waits rather than racing.
+    timeoutMs: 180000,
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      if (isPdf(args.input_path)) throw new Error(`seal: "${args.input_path}" is already a PDF`)
+      if (!isConvertible(args.input_path)) {
+        throw new Error(`seal: "${args.input_path}" is not a document LibreOffice converts (.docx/.doc/.odt/.rtf/.xlsx/.pptx)`)
+      }
+
+      const soffice = await findSoffice(config.sofficePath)
+      if (soffice === undefined) throw new Error(missingConverterMessage())
+
+      const { target } = await readThroughFs(ctx, args.input_path, exec)
+      const source = target.path ?? target.displayPath
+      const output = await toPdf({ input: source, output: args.output_path, soffice })
+
+      // The page count comes from the result, because a conversion that
+      // silently produced one page from a twenty-page contract is the failure
+      // worth catching here rather than at stamping time.
+      const pdf = await loadPdf(await readFile(output))
+      return {
+        output,
+        source: target.displayPath,
+        pages: pdf.getPageCount(),
+        converter: soffice,
+        notes: [
+          '转换后的 PDF 才是要盖章、签名、并在争议中被拿出来的那份文件——字体替换与分页变化都可能发生,盖章前请先看一眼成品。',
+          '原始文件保留未动。',
         ],
       }
     },

@@ -20,7 +20,7 @@ and a **PAdES digital signature** over the whole file from your own certificate.
 The seal image and the certificate are **yours**. These tools neither draw a
 seal nor issue a certificate for an organisation.
 
-## The four tools
+## The five tools
 
 Stamping and signing are done in that order, and it is not interchangeable:
 **stamp first, sign last.** A signature covers the bytes that existed when it
@@ -30,6 +30,23 @@ modified — stamping an already-signed file is refused for that reason.
 **Stamping needs no certificate.** `seal_stamp` and `seal_straddle` want only a
 seal image; the certificate belongs to `seal_sign`. Stamping without ever
 signing is a complete, supported use.
+
+### `seal_to_pdf` — convert Word first
+
+```
+seal_to_pdf(input_path="contract.docx")   → contract.pdf (5 pages)
+```
+
+Seals go on PDFs, and contracts arrive as `.docx`. LibreOffice does the
+conversion (install it yourself, or point `sofficePath` at it), and it is a
+**deliberate step rather than something the stamps do quietly**:
+
+> [!IMPORTANT]
+> Conversion substitutes fonts and can move pagination, and **afterwards the PDF
+> is the document** — it is what gets stamped, signed and disputed. Look at the
+> result before sealing it; the original `.docx` is left untouched.
+
+Handing a `.docx` straight to a stamp is refused, pointing here.
 
 ### `seal_stamp` — the contract seal
 
@@ -188,6 +205,7 @@ certificate is passed per call.
 | `opacity` | `0.9` | real ink lets the text underneath show through |
 | `marginMm` | `20` | distance from the anchored edges |
 | `maxPagesPerSeal` | `20` | largest group one straddle seal may span |
+| `sofficePath` | *(empty)* | LibreOffice binary; empty means search the usual places |
 | `p12Path` | *(empty)* | default signing certificate; a path only, the key stays in that file |
 | `passphraseEnv` | *(empty)* | environment variable holding the passphrase — the preferred route |
 | `passphrase` | *(empty)* | the passphrase itself, stored in plaintext in the profile config |
