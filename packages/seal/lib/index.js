@@ -23,6 +23,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { anchorNames, selectPages } from './geometry.js'
 import { embedSeal, loadPdf, save, stampPages, stampStraddle } from './pdf.js'
+import { createSelfSigned, DEFAULT_DAYS } from './certificate.js'
 import { describeCertificate, describeSignature, hasSignature, signPdf, signerFailureMessage } from './sign.js'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -79,8 +80,10 @@ const CAPABILITY = [
   'Only ONE signature can be added this way. A second signature rewrites the file and invalidates',
   'the first, so counter-signing by another party needs a tool that appends an incremental update.',
   '',
-  'The seal image and the certificate are supplied by the user. These tools do not draw a seal or',
-  'issue a certificate for an organisation.',
+  'The seal image is supplied by the user. `seal_cert` can issue a SELF-SIGNED certificate for free',
+  'when the user has none: that signs validly but proves no identity on its own, so the other side',
+  'has to be given the .cer file and choose to trust it. Say that plainly rather than presenting a',
+  'self-signed certificate as equivalent to one from a CA.',
 ].join('\n')
 
 /**
@@ -462,6 +465,80 @@ function apply(ctx, config) {
         coversWholeFile: described.coversWholeFile === true,
         certificate,
         notes,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'seal_cert',
+    description:
+      'Issue a SELF-SIGNED signing certificate and write it as a .p12 bundle plus a .cer public '
+      + 'certificate. Free, offline, no CA involved — and that is its limit: the signature it makes '
+      + 'is cryptographically valid but identifies nobody by itself. The other party must be given '
+      + 'the .cer and choose to trust it, which suits two sides who already know each other. For a '
+      + 'signature a stranger will accept, a CA-issued certificate is needed instead. Note that a '
+      + 'TLS certificate (Let\'s Encrypt and similar) cannot be used for document signing.',
+    parameters: {
+      common_name: { type: 'string', required: true, description: 'Who signs — the company or person, as it should be displayed by a PDF reader.' },
+      output_path: { type: 'string', required: true, description: 'Where to write the .p12. The .cer is written beside it.' },
+      passphrase: { type: 'string', required: true, description: 'Protects the private key in the bundle. Required.' },
+      organization: { type: 'string', description: 'Organisation name.' },
+      country: { type: 'string', description: 'Two-letter country code, e.g. CN.' },
+      email: { type: 'string', description: 'Email address to record.' },
+      days: { type: 'number', description: `How long it stays valid. Default ${DEFAULT_DAYS}.` },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          p12: { type: 'string' },
+          certificate: { type: 'string' },
+          subject: { type: 'string' },
+          notAfter: { type: 'string' },
+          fingerprint: { type: 'string' },
+          notes: { type: 'array', items: { type: 'string' } },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: [
+        `已签发自签证书:${value.subject}`,
+        `私钥包(要保密):${value.p12}`,
+        `公钥证书(给对方):${value.certificate}`,
+        `有效期至 ${value.notAfter}`,
+        `指纹 ${value.fingerprint}`,
+        ...value.notes,
+      ].join('\n') }],
+    },
+    timeoutMs: 60000,
+    isConcurrencySafe: () => false,
+    async execute(args) {
+      const made = createSelfSigned({
+        commonName: args.common_name,
+        organization: args.organization,
+        country: args.country,
+        email: args.email,
+        days: args.days ?? DEFAULT_DAYS,
+        passphrase: args.passphrase,
+      })
+
+      const p12Path = args.output_path.trim()
+      const certPath = p12Path.replace(/(\.p12|\.pfx)?$/i, '') + '.cer'
+      // 0o600: the bundle is a private key. A signing key that is world-readable
+      // is a signing key anyone on the machine can use as you.
+      await writeFile(p12Path, made.p12, { mode: 0o600 })
+      await writeFile(certPath, made.certificatePem)
+
+      return {
+        p12: p12Path,
+        certificate: certPath,
+        subject: made.subject,
+        notAfter: made.notAfter,
+        fingerprint: made.fingerprint,
+        notes: [
+          '这是自签证书:签名在密码学上有效,但它本身不证明你是谁。要让对方的阅读器认,把 .cer 交给对方并请其信任(核对指纹)。',
+          '.p12 里有私钥,谁拿到谁就能以你的名义签署——不要发给任何人,也不要放进代码仓库。已按 0600 权限写入。',
+          '需要陌生人或法庭直接采信,得用受信任 CA 签发的证书;TLS 证书(Let\'s Encrypt 之类)不能用于文档签名。',
+        ],
       }
     },
   }))

@@ -21,7 +21,7 @@
  * @module dsh-plugin-seal/sign
  */
 
-import { P12Signer } from '@signpdf/signer-p12'
+import { P12Signer, repairEncoding } from './signer.js'
 import { SignPdf } from '@signpdf/signpdf'
 import { pdflibAddPlaceholder } from '@signpdf/placeholder-pdf-lib'
 import { PDFDocument } from 'pdf-lib'
@@ -157,8 +157,11 @@ export function describeCertificate(p12Bytes, passphrase) {
   const asn1 = forge.asn1.fromDer(forge.util.createBuffer(Buffer.from(p12Bytes).toString('binary')))
   const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, passphrase ?? '')
   const bags = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ?? []
-  const certificate = bags.map(bag => bag.cert).find(cert => cert !== undefined)
-  if (certificate === undefined) return { subject: '', issuer: '', selfSigned: false }
+  const found = bags.map(bag => bag.cert).find(cert => cert !== undefined)
+  if (found === undefined) return { subject: '', issuer: '', selfSigned: false }
+  // Same repair as the signer: forge hands back UTF8String values as raw
+  // bytes, so an unrepaired name reads as mojibake in the result the user sees.
+  const certificate = repairEncoding(found)
 
   const name = attributes => attributes.map(part => `${part.shortName ?? part.name}=${part.value}`).join(',')
   const subject = name(certificate.subject.attributes)

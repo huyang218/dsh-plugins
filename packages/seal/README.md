@@ -20,7 +20,7 @@ and a **PAdES digital signature** over the whole file from your own certificate.
 The seal image and the certificate are **yours**. These tools neither draw a
 seal nor issue a certificate for an organisation.
 
-## The three tools
+## The four tools
 
 Stamping and signing are done in that order, and it is not interchangeable:
 **stamp first, sign last.** A signature covers the bytes that existed when it
@@ -64,6 +64,35 @@ Each page draws the **whole seal** through a clip window that exposes only that
 page's slice. The alternative — drawing it off the page edge and letting the
 page box hide the rest — leaves the rest of the seal in the file, where it can
 be extracted. That is not hidden.
+
+### `seal_cert` — issue a certificate for free
+
+```
+seal_cert(common_name="Example Co Ltd", output_path="company.p12", passphrase="…")
+```
+
+For when there is no certificate yet: generates a key pair and a **self-signed**
+certificate locally, writing the `.p12` (private key, mode `0600`) and the
+`.cer` (public certificate, for the other side). No network, no purchase.
+
+**Its limit is the point**: a self-signed certificate makes a cryptographically
+valid signature that identifies nobody by itself. For the other party's reader
+to accept it, they must be given the `.cer`, check the fingerprint, and choose
+to trust it — which fits two sides who already know each other. For a stranger
+or a court, a CA-issued certificate is still required.
+
+What "free" actually gets you:
+
+| Route | Free | What it proves | Verdict |
+| --- | --- | --- | --- |
+| `seal_cert`, self-signed | yes | someone holding that key signed; identity by prior agreement | fine internally, or between known parties |
+| Free S/MIME (Actalis and similar) | yes | a validated email address | accepted by some readers, not on Adobe's AATL |
+| **Let's Encrypt** | yes | **not usable for document signing** — TLS server certificates, `serverAuth` usage | ✗ a common misconception |
+| Chinese e-signature platforms' free tiers | partly | third-party CA custody, the strongest 《电子签名法》 position | they sign **on their servers**, so not through this plugin |
+
+> [!IMPORTANT]
+> The `.p12` holds the private key: **anyone who has it can sign as you.** Do not
+> send it to anyone and do not commit it. The file to share is the `.cer`.
 
 ### `seal_sign` — the PAdES signature
 
@@ -129,9 +158,29 @@ unsealed original is what a dispute gets compared against; the result goes to
 This package uses [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT) for the
 PDF work and [@signpdf](https://github.com/vbuch/node-signpdf) (MIT) with
 [node-forge](https://github.com/digitalbazaar/forge) (BSD-3) for the PAdES
-signature and certificate parsing — the only runtime dependencies in this
+signature and certificates. The PKCS#12 signer is our own rather than
+`@signpdf/signer-p12`: the stock one produces a signature every verifier
+rejects when the certificate's name contains non-ASCII characters, which is
+every Chinese company signing under its own name. See
+[what that was](#a-fixed-upstream-bug) — the only runtime dependencies in this
 repository. Hand-writing a PDF writer or a CMS signer to avoid them would put
 unproven code between people and the documents they sign.
+
+## A fixed upstream bug
+
+`@signpdf/signer-p12` signs with a certificate that node-forge has parsed and
+then re-encodes into the signature. That round trip is not a fixed point for a
+non-ASCII distinguished name: forge returns a `UTF8String` as raw bytes and
+encodes them as UTF-8 a second time. On a real certificate for
+`CN=上海示例科技有限公司`, a 79-byte issuer name became 121 bytes, so the
+signature named an issuer matching no certificate. `pdfsig` reported an empty
+signer name and **Signature is Invalid** — a contract that looked signed and
+verified as broken, for every Chinese company using its own name.
+
+This package therefore carries its own signer, identical to the upstream one
+apart from decoding those values before forge re-encodes them. There is a test
+that a Chinese-named certificate signs to something `pdfsig` accepts, with the
+name intact.
 
 ## Licence
 

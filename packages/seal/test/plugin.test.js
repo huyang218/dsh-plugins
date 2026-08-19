@@ -24,11 +24,11 @@ test('the plugin exports the named shape a loader entry needs', () => {
   assert.deepEqual(plugin.inject, ['tools', 'fs', 'systemPrompt'])
 })
 
-test('all three tools are registered, with schemas a closed output demands', () => {
+test('all four tools are registered, with schemas a closed output demands', () => {
   const { ctx, tools } = fakeContext()
   plugin.apply(ctx, new plugin.Config())
 
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ['seal_sign', 'seal_stamp', 'seal_straddle'])
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['seal_cert', 'seal_sign', 'seal_stamp', 'seal_straddle'])
   for (const tool of tools) {
     assert.ok(tool.output.schema, `${tool.name} declares an output schema`)
     assert.equal(typeof tool.output.render, 'function')
@@ -62,7 +62,9 @@ test('the model is told what a stamp is not, and in which order to work', () => 
   assert.match(text, /stamp first, sign last/i)
   assert.match(text, /self-signed certificate produces a valid signature by an unidentified/)
   assert.match(text, /Only ONE signature/)
-  assert.match(text, /do not draw a seal or\n?issue a certificate/, 'neither seals nor certificates are invented')
+  // The free certificate path exists, and its limit has to travel with it.
+  assert.match(text, /SELF-SIGNED certificate for free/)
+  assert.match(text, /proves no identity on its own/)
 })
 
 test('each tool description carries its own limit, since that is what the model reads', () => {
