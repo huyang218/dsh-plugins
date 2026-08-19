@@ -61,6 +61,10 @@ seal_stamp(pdf_path, pages="last", anchor="bottom-right", width_mm=40, rotation=
   "bottom right of the last page" lands in white space. Use `party: "甲方"` when
   a contract has several signatories; asking for one party **never** lands on
   the other's line. If nothing is found it falls back to the corner and says so.
+  Nudge the found position with `offset_x_mm` / `offset_y_mm` (6mm right by
+  default): a seal usually covers the company name written after the label
+  rather than the label itself — on the agreement tested here `offset_x_mm: 22`
+  lands it squarely on 【Linkspire Limited】.
 - **The background is knocked out automatically**: a scanned or photographed
   seal is opaque, and stamping it lays a white card over the clause. The
   background colour is **detected from the image's border** — white paper, a

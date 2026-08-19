@@ -103,7 +103,7 @@ function drawSeal({ page, image, size, position, rotation, opacity }) {
  * @param {Object} options - the document, the seal, and where it goes.
  * @returns {Promise<Object>} what was stamped, per page
  */
-export async function stampPages({ pdf, seal, pages, anchor, marginMm, xMm, yMm, spot, widthMm, heightMm, rotation, opacity }) {
+export async function stampPages({ pdf, seal, pages, anchor, marginMm, xMm, yMm, spot, offsetXMm, offsetYMm, widthMm, heightMm, rotation, opacity }) {
   const size = sealSize({ widthMm, heightMm, aspect: seal.aspect })
   const stamped = []
 
@@ -115,7 +115,12 @@ export async function stampPages({ pdf, seal, pages, anchor, marginMm, xMm, yMm,
     const position = xMm !== undefined && yMm !== undefined
       ? { x: xMm * (72 / 25.4), y: yMm * (72 / 25.4) }
       : spot !== undefined
-        ? placementFor({ candidate: spot, size })
+        ? placementFor({
+          candidate: spot,
+          size,
+          ...offsetXMm === undefined ? {} : { offsetXMm },
+          ...offsetYMm === undefined ? {} : { offsetYMm },
+        })
         : anchorPosition({ page: { width, height }, size, anchor, marginMm })
 
     const overflow = overflowEdges({ page: { width, height }, size, position })
