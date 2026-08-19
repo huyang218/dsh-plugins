@@ -1,0 +1,51 @@
+{
+  "name": "dsh-plugin-seal",
+  "version": "0.1.0",
+  "description": "Stamp a company seal onto a PDF — a contract seal on chosen pages, and a straddle seal split across every page edge so a swapped or removed page shows. Renders a seal image; it is not a cryptographic signature.",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "pdf",
+    "seal",
+    "stamp",
+    "contract",
+    "电子签章",
+    "骑缝章"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huyang218/dsh-plugins.git",
+    "directory": "packages/seal"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "category": "tools/documents",
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  }
+}

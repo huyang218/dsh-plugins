@@ -30,7 +30,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | `ui/…` | 用户 | Web 客户端扩展——结果卡片、键盘操作界面 | [ui 指南](docs/authoring-ui.md) |
 
 分类的后半截是领域:`tools/finance` 与 `ui/finance` 是 A 股的数据面、信息面与持仓;
-`tools/vision` 让纯文本模型能借助多模态模型看图;
+`tools/vision` 让纯文本模型能借助多模态模型看图;`tools/documents` 直接加工文件本身;
 `runtime/provider`、`runtime/observability`、`runtime/reliability`、`runtime/llm`
 是共享凭证、度量、重试与网关兼容;`runtime/im` 让聊天软件能驱动会话;`ui/productivity` 是 Web 客户端本身的操作效率。
 
@@ -43,6 +43,7 @@ dsh 是基于 Cordis 的「一切皆插件」agent 运行框架。
 | [astock](packages/astock) | A 股行情、K 线、技术指标、全市场筛选、财报、资金流、可转债——免费,少数工具需 Tushare token | `dsh-plugin-astock` |
 | [vision](packages/vision) | 让纯文本 agent 中途调用多模态模型——Qwen / Kimi / OpenAI / Claude / Gemini,返回结构化证据而不是散文 | `dsh-plugin-vision` |
 | [ainfo](packages/ainfo) | A 股新闻、券商研报、业绩预告、分红、股东增减持、十大股东——需 Tushare token | `dsh-plugin-ainfo` |
+| [seal](packages/seal) | 给 PDF 盖章——指定页面盖合同章,以及按页数等分的骑缝章。盖的是图片,不是电子签名 | `dsh-plugin-seal` |
 | [aportfolio](packages/aportfolio) | 跨会话记住持仓与自选,实时估值,给出盈亏、占比与目标价触发 | `dsh-plugin-aportfolio` |
 
 **`runtime/` — 围绕 harness 的行为,模型看不见**

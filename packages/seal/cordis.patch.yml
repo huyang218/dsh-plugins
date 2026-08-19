@@ -1,0 +1,8 @@
+# Bundle config layer: two tools for putting a seal on a PDF.
+#
+# Set `sealPath` to your own seal image (PNG with a transparent background).
+# The tools render that image; they are not an electronic signature, and the
+# system prompt says so before the model can call them.
+- insert:
+    - id: seal
+      name: dsh-plugin-seal

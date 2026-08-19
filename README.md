@@ -31,7 +31,8 @@ extends decides where it can be seen from:
 
 The second half of the category is the domain: `tools/finance` and `ui/finance`
 cover A-share market data, information feeds and portfolio state; `tools/vision`
-reaches a multimodal model on behalf of a text-only one;
+reaches a multimodal model on behalf of a text-only one; `tools/documents` works on
+the files themselves;
 `runtime/provider`, `runtime/observability`, `runtime/reliability` and
 `runtime/llm` cover shared credentials, measurement, retries and gateway
 compatibility; `runtime/im` drives sessions from a chat app; `ui/productivity` covers the web client's own ergonomics.
@@ -45,6 +46,7 @@ compatibility; `runtime/im` drives sessions from a chat app; `ui/productivity` c
 | [astock](packages/astock) | A-share quotes, K-lines, indicators, whole-market screening, financials, money flow, convertible bonds — free, a few tools need a Tushare token | `dsh-plugin-astock` |
 | [vision](packages/vision) | Lets a text-only agent call a multimodal model mid-task — Qwen, Kimi, OpenAI, Claude or Gemini — and get back structured evidence rather than prose | `dsh-plugin-vision` |
 | [ainfo](packages/ainfo) | A-share news, broker research, earnings pre-announcements, dividends, insider trades, shareholders — needs a Tushare token | `dsh-plugin-ainfo` |
+| [seal](packages/seal) | Stamps a company seal on a PDF — on chosen pages, and split across every page edge so a swapped page shows. Renders an image; not a signature | `dsh-plugin-seal` |
 | [aportfolio](packages/aportfolio) | Holdings and watchlist that survive the session, priced live, with profit, weights and target hits | `dsh-plugin-aportfolio` |
 
 **`runtime/` — behaviour around the harness, invisible to the model**
