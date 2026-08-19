@@ -29,11 +29,11 @@ test('the plugin exports the named shape a loader entry needs', () => {
   assert.deepEqual(plugin.inject, ['tools', 'fs', 'systemPrompt'])
 })
 
-test('all four tools are registered, with schemas a closed output demands', () => {
+test('all five tools are registered, with schemas a closed output demands', () => {
   const { ctx, tools } = fakeContext()
   plugin.apply(ctx, new plugin.Config())
 
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ['seal_cert', 'seal_sign', 'seal_stamp', 'seal_straddle'])
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['seal_cert', 'seal_sign', 'seal_stamp', 'seal_straddle', 'seal_to_pdf'])
   for (const tool of tools) {
     assert.ok(tool.output.schema, `${tool.name} declares an output schema`)
     assert.equal(typeof tool.output.render, 'function')
@@ -306,7 +306,7 @@ test('the client can set, read back and clear the signing credential', async () 
   }
   plugin.apply(ctx, new plugin.Config())
 
-  assert.equal(tools.length, 4)
+  assert.equal(tools.length, 5)
   const route = routes.find(one => one.path === '/seal/credential')
   assert.ok(route, 'the client has no way to configure anything without this route')
 
@@ -354,5 +354,5 @@ test('without a web server the tools still work', () => {
   const { ctx, tools } = fakeContext()
   ctx.inject = () => {}   // nothing provides webServer
   assert.doesNotThrow(() => plugin.apply(ctx, new plugin.Config()))
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ['seal_cert', 'seal_sign', 'seal_stamp', 'seal_straddle'])
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['seal_cert', 'seal_sign', 'seal_stamp', 'seal_straddle', 'seal_to_pdf'])
 })
