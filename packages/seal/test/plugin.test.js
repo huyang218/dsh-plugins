@@ -115,3 +115,62 @@ test('stamping an already-signed document is refused, not quietly done', () => {
   assert.throws(() => plugin.refuseIfSigned(signed), /Stamp the unsigned original/)
   assert.doesNotThrow(() => plugin.refuseIfSigned(Buffer.from('%PDF-1.7\nplain\n')))
 })
+
+test('the certificate and passphrase can come from settings instead of every call', () => {
+  // The point of configuring them: seal_sign(pdf_path) alone should work.
+  const config = new plugin.Config({ p12Path: '/keys/company.p12', passphrase: 'from-settings' })
+  const resolved = plugin.resolveCredential({ config, args: {}, env: {} })
+
+  assert.equal(resolved.p12Path, '/keys/company.p12')
+  assert.equal(resolved.passphrase, 'from-settings')
+  assert.equal(resolved.passphraseFrom, 'settings')
+})
+
+test('an environment variable beats the plaintext setting, and a call beats both', () => {
+  const config = new plugin.Config({
+    p12Path: '/keys/company.p12',
+    passphraseEnv: 'SEAL_PASS',
+    passphrase: 'from-settings',
+  })
+
+  assert.equal(plugin.resolveCredential({ config, args: {}, env: { SEAL_PASS: 'from-env' } }).passphrase, 'from-env')
+  assert.equal(
+    plugin.resolveCredential({ config, args: { passphrase: 'from-call' }, env: { SEAL_PASS: 'from-env' } }).passphrase,
+    'from-call',
+  )
+  // The path is overridable per call too, for signing with a different party's
+  // certificate without changing the settings.
+  assert.equal(
+    plugin.resolveCredential({ config, args: { p12_path: '/keys/other.p12', passphrase: 'x' }, env: {} }).p12Path,
+    '/keys/other.p12',
+  )
+})
+
+test('a named environment variable that is not set is an error, not a silent fallback', () => {
+  // Falling back to the plaintext field would sign with a different credential
+  // than the operator configured, and the file would look fine.
+  const config = new plugin.Config({ p12Path: '/keys/c.p12', passphraseEnv: 'SEAL_PASS', passphrase: 'other' })
+  assert.throws(() => plugin.resolveCredential({ config, args: {}, env: {} }), /SEAL_PASS/)
+  assert.throws(() => plugin.resolveCredential({ config, args: {}, env: { SEAL_PASS: '' } }), /empty or unset/)
+})
+
+test('signing with no certificate anywhere says where to get one', () => {
+  assert.throws(
+    () => plugin.resolveCredential({ config: new plugin.Config(), args: {}, env: {} }),
+    /seal_cert to make one/,
+  )
+})
+
+test('a plaintext passphrase in settings is warned about once, at startup', () => {
+  const { ctx } = fakeContext()
+  const warnings = []
+  ctx.logger.warn = message => warnings.push(message)
+  plugin.apply(ctx, new plugin.Config({ passphrase: 'secret' }))
+  assert.ok(warnings.some(message => message.includes('plaintext')))
+
+  const quiet = fakeContext()
+  const quietWarnings = []
+  quiet.ctx.logger.warn = message => quietWarnings.push(message)
+  plugin.apply(quiet.ctx, new plugin.Config({ passphraseEnv: 'SEAL_PASS' }))
+  assert.deepEqual(quietWarnings, [], 'the environment-variable route is the recommended one and says nothing')
+})

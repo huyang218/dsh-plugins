@@ -50,6 +50,19 @@ const Config = Schema.object({
     '一枚骑缝章最多跨多少页。60 页的合同盖一枚章,每页只有不到 1 毫米宽的一条,'
     + '看不出也证明不了什么;线下做法同样是分批盖,这个值就是那个批量。',
   ),
+  p12Path: Schema.string().default('').description(
+    '默认签名证书(PKCS#12,`.p12` / `.pfx`)的路径。配了它,`seal_sign` 就不必每次传 p12_path。'
+    + '这里只是**路径**,私钥仍然只在那个文件里。',
+  ),
+  passphraseEnv: Schema.string().default('').description(
+    '存放证书口令的**环境变量名**(如 `SEAL_P12_PASSPHRASE`)。**推荐用这个而不是下面那个**:'
+    + 'profile 的配置文件会被备份、同步、截图,而环境变量不会跟着它走。',
+  ),
+  passphrase: Schema.string().role('secret').default('').description(
+    '证书口令,直接写在这里。**它会以明文存进 profile 的 `cordis.patch.yml`**——那个文件没有加密,'
+    + '也不会在界面里被打码。谁读到「这个文件 + 那个 .p12」,谁就能以你的名义签署。图省事可以用,'
+    + '但 `passphraseEnv` 是更好的选择。',
+  ),
   overwrite: Schema.boolean().default(false).description(
     '允许把结果写回原文件。**默认关闭**:盖过章的 PDF 覆盖掉未盖章的原件,是不可逆的。',
   ),
@@ -117,6 +130,43 @@ export function outputPathFor({ input, requested, overwrite }) {
 }
 
 /**
+ * Work out which certificate and passphrase a signing call should use.
+ *
+ * Three sources, most specific first: what the call passed, then an environment
+ * variable named by the config, then the config's own plaintext field. The
+ * environment variable exists because a passphrase in `cordis.patch.yml` is a
+ * passphrase in every backup and screenshot of that file — it is supported
+ * because it is convenient, and named as the weaker option because it is.
+ *
+ * @param {Object} options - `{ config, args, env }`.
+ * @returns {Object} `{ p12Path, passphrase, passphraseFrom }`
+ */
+export function resolveCredential({ config, args, env = process.env }) {
+  const p12Path = (args.p12_path ?? '').trim() || config.p12Path.trim()
+  if (p12Path.length === 0) {
+    throw new Error('seal: no certificate. Pass p12_path, or set p12Path in the plugin settings. Use seal_cert to make one if you have none.')
+  }
+
+  if (typeof args.passphrase === 'string' && args.passphrase.length > 0) {
+    return { p12Path, passphrase: args.passphrase, passphraseFrom: 'argument' }
+  }
+  const variable = config.passphraseEnv.trim()
+  if (variable.length > 0) {
+    const fromEnv = env[variable]
+    if (typeof fromEnv === 'string' && fromEnv.length > 0) {
+      return { p12Path, passphrase: fromEnv, passphraseFrom: `\$${variable}` }
+    }
+    // Named but unset is a mistake worth reporting: falling back to the
+    // plaintext field would quietly use a different credential than intended.
+    throw new Error(`seal: passphraseEnv names ${variable}, but that environment variable is empty or unset in the dsh process.`)
+  }
+  if (config.passphrase.length > 0) {
+    return { p12Path, passphrase: config.passphrase, passphraseFrom: 'settings' }
+  }
+  return { p12Path, passphrase: '', passphraseFrom: 'none' }
+}
+
+/**
  * Refuse to stamp a document that is already signed.
  *
  * Stamping rewrites the file, and the signature then covers bytes that no
@@ -138,6 +188,12 @@ export function refuseIfSigned(bytes) {
  */
 function apply(ctx, config) {
   ctx.systemPrompt.section({ name: 'seal:capability', text: CAPABILITY })
+
+  if (config.passphrase.length > 0 && config.passphraseEnv.trim().length === 0) {
+    // Said once, at startup, because the file it lands in is easy to forget
+    // about: profile config gets backed up, synced and pasted into issues.
+    ctx.logger?.warn?.('[seal] the signing passphrase is stored in plaintext in this profile\'s cordis.patch.yml; passphraseEnv keeps it out of that file')
+  }
 
   /**
    * Resolve and embed the seal image for one call.
@@ -375,8 +431,8 @@ function apply(ctx, config) {
       + 'unidentified party, which is reported rather than glossed over.',
     parameters: {
       pdf_path: { type: 'string', required: true, description: 'The PDF to sign — already stamped, if it is to be stamped.' },
-      p12_path: { type: 'string', required: true, description: 'The PKCS#12 bundle holding the private key and its certificate.' },
-      passphrase: { type: 'string', description: 'The passphrase for that bundle.' },
+      p12_path: { type: 'string', description: 'The PKCS#12 bundle holding the private key and its certificate. Defaults to the configured one.' },
+      passphrase: { type: 'string', description: 'The passphrase for that bundle. Defaults to the configured environment variable or setting.' },
       reason: { type: 'string', description: 'Why it was signed; shown by PDF viewers.' },
       signer_name: { type: 'string', description: 'The name recorded in the signature dictionary.' },
       location: { type: 'string', description: 'Where it was signed.' },
@@ -420,8 +476,9 @@ function apply(ctx, config) {
     timeoutMs: 120000,
     isConcurrencySafe: () => false,
     async execute(args, exec) {
+      const credential = resolveCredential({ config, args })
       const { target: pdfTarget, bytes } = await readThroughFs(ctx, args.pdf_path, exec)
-      const { target: p12Target, bytes: p12Bytes } = await readThroughFs(ctx, args.p12_path, exec)
+      const { bytes: p12Bytes } = await readThroughFs(ctx, credential.p12Path, exec)
 
       if (hasSignature(bytes)) {
         // Signing again rewrites the file, and the first signature then reads
@@ -432,7 +489,7 @@ function apply(ctx, config) {
 
       let certificate
       try {
-        certificate = describeCertificate(p12Bytes, args.passphrase ?? '')
+        certificate = describeCertificate(p12Bytes, credential.passphrase)
       } catch (error) {
         throw new Error(signerFailureMessage(error))
       }
@@ -440,7 +497,7 @@ function apply(ctx, config) {
       const signed = await signPdf({
         pdfBytes: bytes,
         p12Bytes,
-        passphrase: args.passphrase ?? '',
+        passphrase: credential.passphrase,
         reason: args.reason,
         name: args.signer_name,
         location: args.location,
@@ -457,7 +514,11 @@ function apply(ctx, config) {
       }
       if (certificate.expired) notes.push('证书已过期:多数阅读器会对这份签名给出警告。')
       notes.push('此后不要再对这个文件盖章或编辑——那会让签名失效。要盖章就回到未签名的原件,盖完再签。')
-      notes.push(`用 pdfsig 或 Adobe Reader 可独立验签:签名覆盖 ${described.byteRange?.[3] === undefined ? '未知' : '整个文件'}。`)
+      notes.push('可用 pdfsig(poppler)或 Adobe Reader 独立验签,不必信这里的结论。')
+
+      // The source, never the value: knowing which credential was used is
+      // what makes a wrong-key failure diagnosable.
+      notes.push(`证书 ${credential.p12Path},口令来自${{ argument: '调用参数', settings: '插件设置(明文)', none: '(空)' }[credential.passphraseFrom] ?? `环境变量 ${credential.passphraseFrom}`}。`)
 
       return {
         output,

@@ -104,6 +104,30 @@ Signs the **whole file** with a CMS signature from your PKCS#12 (`.p12`/`.pfx`)
 certificate. This is the part with legal weight: any later edit — including
 another stamp — is detectable, and the certificate says who signed.
 
+**Configure the certificate once** and later calls need only `pdf_path`:
+
+```yaml
+- id: seal
+  config:
+    p12Path: '/Users/you/keys/company.p12'
+    passphraseEnv: 'SEAL_P12_PASSPHRASE'   # preferred: keep it out of the file
+    # passphrase: '…'                      # also works, see the warning
+```
+
+The passphrase is taken from, in order: **the call, then the environment
+variable named by `passphraseEnv`, then the `passphrase` setting**. A named
+variable that is unset is an **error** rather than a quiet fall back to the
+plaintext one — otherwise you would sign with a different credential than you
+configured. The result names the source that was used, never the value.
+
+> [!WARNING]
+> A passphrase in `passphrase` is stored **in plaintext** in the profile's
+> `cordis.patch.yml`, and the settings form does **not** mask it (the client
+> form does not honour the `secret` role — checked, not assumed). That file gets
+> backed up, synced and pasted into issues; whoever has it and the `.p12` can
+> sign as you. Startup logs a warning for that route and says nothing for
+> `passphraseEnv`, which keeps the secret out of the file.
+
 - **Last, always.** Stamping a signed file appends bytes the signature does not
   cover. Stamping an already-signed document is refused, pointing back at the
   unsigned original.
@@ -136,6 +160,9 @@ certificate is passed per call.
 | `opacity` | `0.9` | real ink lets the text underneath show through |
 | `marginMm` | `20` | distance from the anchored edges |
 | `maxPagesPerSeal` | `20` | largest group one straddle seal may span |
+| `p12Path` | *(empty)* | default signing certificate; a path only, the key stays in that file |
+| `passphraseEnv` | *(empty)* | environment variable holding the passphrase — the preferred route |
+| `passphrase` | *(empty)* | the passphrase itself, stored in plaintext in the profile config |
 | `overwrite` | `false` | whether the original may be written over |
 
 **The original is not overwritten by default.** Stamping is irreversible, and the

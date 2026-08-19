@@ -95,6 +95,7 @@ cordis.patch.yml 的 name dsh-plugin-astock  # 按包名引用,不是路径
   - **不生成印章**:印章图片由用户提供(带透明背景的 PNG)。这是有意的边界,不给任意组织画章。
   - **加密 PDF 直接拒绝**:pdf-lib 加 `ignoreEncryption` 能打开,但写回时保护就没了——"盖章成功"等于顺手去掉了密码。本包从不传那个 flag,并在错误信息里说明。
   - **越界不自动纠正、旋转要说明**:章跑出页面只报告是哪几条边(挪回来 = 盖在签署人没选的位置);pdf-lib 绕锚点旋转,所以报告的坐标是旋转前的,越界检查也是按未旋转方框算的,有旋转时结果里明确提示。
+  - **签名凭证可配置,但口令的去处要说清**(用户要求):`p12Path` / `passphraseEnv` / `passphrase` 三选一,取用顺序是**调用参数 → 环境变量 → 配置明文**。`passphraseEnv` 指定了但变量没设**直接报错**,不退回明文那个——否则你以为在用 A 口令、实际用的是 B。**客户端表单不认 `role: 'secret'`**(查证过 `dsh-client-schema-form`),所以明文口令在界面上也不打码,配了明文口令启动时会打一条日志提醒;结果里只写口令**来源**不写值。
   - **默认不覆盖原件**(`overwrite: false`,输出 `<原名>.sealed.pdf`):盖章不可逆,未盖章的原件正是出事时用来比对的。
   - **`seal_sign` 做真正的 PAdES 签名**(`lib/sign.js`,`@signpdf` + `node-forge`):对整个文件的 CMS 签名。三条铁律:①**顺序不可换,先盖章最后签**——签名覆盖的是签那一刻的字节,对已签名文件盖章会让每个阅读器报「文档已被修改」,所以**两个盖章工具都先 `refuseIfSigned`**;②**只能签一次**(pdf-lib 是整文件重写不是增量更新,再签会毁掉第一个签名),多方会签需要能做 incremental update 的工具,如实说明而不是假装支持;③**签名的分量取决于证书**,结果里报出 subject/issuer/是否自签/有效期——自签证书是「某个持有该密钥的人签的」,密码学有效但不证明身份。
   - **上游 `@signpdf/signer-p12` 在非 ASCII 证书名下会产出无效签名(已自带修正版 signer)**:它把 forge 解析出的证书重新编码进 CMS,而 forge 对 `UTF8String` 是「按原始字节返回、再按 UTF-8 编一遍」——解析→重编码不是幂等的。实测 `CN=上海示例科技有限公司` 的证书:issuer 79 字节 → 121 字节,签名指名的签发者匹配不到任何证书,`pdfsig` 报签署人为空 + `Signature is Invalid`。**即每家用中文名签署的公司拿到的都是坏签名**。修法是在 forge 重编码前 `forge.util.decodeUtf8` 那些值(`lib/signer.js` 的 `repairEncoding`),重编码即可还原原始字节;`describeCertificate` 同样要修,否则结果里是乱码。生成证书时非 ASCII 值也**必须**标 `valueTagClass: UTF8`,否则默认 PrintableString 写出的证书 openssl 都解析不了。
