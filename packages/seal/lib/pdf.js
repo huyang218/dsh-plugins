@@ -13,6 +13,7 @@ import {
   popGraphicsState, pushGraphicsState,
 } from 'pdf-lib'
 import { anchorPosition, overflowEdges, sealSize, straddleGroups, straddleSlice, toMm } from './geometry.js'
+import { placementFor } from './locate.js'
 
 /**
  * Load a PDF, refusing anything that is not one.
@@ -102,7 +103,7 @@ function drawSeal({ page, image, size, position, rotation, opacity }) {
  * @param {Object} options - the document, the seal, and where it goes.
  * @returns {Promise<Object>} what was stamped, per page
  */
-export async function stampPages({ pdf, seal, pages, anchor, marginMm, xMm, yMm, widthMm, heightMm, rotation, opacity }) {
+export async function stampPages({ pdf, seal, pages, anchor, marginMm, xMm, yMm, spot, widthMm, heightMm, rotation, opacity }) {
   const size = sealSize({ widthMm, heightMm, aspect: seal.aspect })
   const stamped = []
 
@@ -113,7 +114,9 @@ export async function stampPages({ pdf, seal, pages, anchor, marginMm, xMm, yMm,
     // bottom-left like the rest of PDF space.
     const position = xMm !== undefined && yMm !== undefined
       ? { x: xMm * (72 / 25.4), y: yMm * (72 / 25.4) }
-      : anchorPosition({ page: { width, height }, size, anchor, marginMm })
+      : spot !== undefined
+        ? placementFor({ candidate: spot, size })
+        : anchorPosition({ page: { width, height }, size, anchor, marginMm })
 
     const overflow = overflowEdges({ page: { width, height }, size, position })
     drawSeal({ page, image: seal.image, size, position, rotation, opacity })
@@ -125,6 +128,7 @@ export async function stampPages({ pdf, seal, pages, anchor, marginMm, xMm, yMm,
       // that is not the size everyone assumed: a 40mm seal is right on A4 and
       // a speck on a 437mm-wide page, and nothing else in the result says so.
       pageMm: [toMm(width), toMm(height)],
+      ...spot === undefined ? {} : { foundBy: spot.text },
       ...overflow.length > 0 ? { overflows: overflow } : {},
     })
   }

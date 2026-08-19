@@ -26,6 +26,8 @@ import { embedSeal, loadPdf, save, stampPages, stampStraddle } from './pdf.js'
 import { createSelfSigned, DEFAULT_DAYS } from './certificate.js'
 import { CREDENTIAL_DOMAIN, createStore, publicView, readSubmission } from './credential.js'
 import { findSoffice, isConvertible, isPdf, missingConverterMessage, toPdf } from './convert.js'
+import { decodeImage, encodePng, hasTransparency, knockOutBackground } from './image.js'
+import { findSealSpots, readWords } from './locate.js'
 import { describeCertificate, describeSignature, hasSignature, signPdf, signerFailureMessage } from './sign.js'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -59,6 +61,15 @@ const Config = Schema.object({
   maxPagesPerSeal: Schema.number().default(20).description(
     '一枚骑缝章最多跨多少页。60 页的合同盖一枚章,每页只有不到 1 毫米宽的一条,'
     + '看不出也证明不了什么;线下做法同样是分批盖,这个值就是那个批量。',
+  ),
+  removeBackground: Schema.boolean().default(true).description(
+    '盖章前自动把印章图片的背景抠成透明。**默认开启**:扫描或拍照来的印章是不透明的,'
+    + '直接盖上去等于拿一张白卡片盖住下面的条款。背景色是**从图片边缘自动认出来的**,'
+    + '白纸底、绿幕底、灰底都成立;已经带透明通道的图片原样使用,不再处理。',
+  ),
+  backgroundTolerance: Schema.number().default(40).description(
+    '判定为背景的颜色容差(0-255)。扫描件噪点大就调高;印章颜色与底色接近时调低。'
+    + '抠完的结果会报出「保留了百分之几」,几乎全留或几乎全抠都会明确警告。',
   ),
   sofficePath: Schema.string().default('').description(
     'LibreOffice 可执行文件路径,用于把 Word 文档转成 PDF。留空则自动在常见位置和 PATH 里找'
@@ -322,13 +333,41 @@ function apply(ctx, config) {
    * @param {Object} exec - the tool execution.
    * @returns {Promise<Object>} the embedded seal
    */
-  const sealFor = async (pdf, requested, exec) => {
+  const sealFor = async (pdf, requested, exec, options = {}) => {
     const path = (requested ?? '').trim() || config.sealPath
     if (path.length === 0) {
       throw new Error('seal: no seal image. Pass seal_path, or set sealPath in the plugin settings. The seal is your own — this plugin does not draw one.')
     }
     const { target, bytes } = await readThroughFs(ctx, path, exec)
-    return { ...await embedSeal(pdf, bytes, target.displayPath), path: target.displayPath }
+
+    // A scanned seal is opaque, and stamping it lays a white card over the
+    // clause underneath. The background comes out here rather than in a
+    // separate step the caller has to remember.
+    const wanted = options.removeBackground ?? config.removeBackground
+    let prepared = bytes
+    let knockout
+    if (wanted) {
+      const decoded = decodeImage(bytes)
+      if (hasTransparency(decoded)) {
+        knockout = { skipped: '图片已带透明通道,原样使用' }
+      } else {
+        const result = knockOutBackground(decoded, {
+          tolerance: options.backgroundTolerance ?? config.backgroundTolerance,
+        })
+        prepared = encodePng(result.image)
+        knockout = {
+          background: result.background,
+          ratio: result.ratio,
+          warning: result.warning,
+        }
+      }
+    }
+
+    return {
+      ...await embedSeal(pdf, prepared, target.displayPath),
+      path: target.displayPath,
+      knockout,
+    }
   }
 
   const sharedOutput = {
@@ -348,16 +387,20 @@ function apply(ctx, config) {
   ctx.tools.register(defineTool({
     name: 'seal_stamp',
     description:
-      'Stamp a seal image (合同章) onto chosen pages of a PDF and write a new file. '
-      + 'Pages are given as "3", "1,4", "2-5", "all", "first" or "last". Position is a named anchor '
-      + '(' + anchorNames().join(', ') + ') with a margin, or explicit x/y in millimetres from the '
-      + 'bottom-left. RENDERS an image only: this is not an electronic signature and proves nothing '
-      + 'about who sealed it or whether the document changed afterwards.',
+      'Stamp a seal image (合同章) onto a PDF and write a new file. '
+      + 'By default it FINDS the signature block itself — reading the document\'s words and their '
+      + 'positions, so the seal lands on the page that says 甲方(盖章) rather than in a fixed corner, '
+      + 'which is often not even the last page. Pass `party` when a contract has several signatories. '
+      + 'Override with `pages` plus an anchor (' + anchorNames().join(', ') + ') or explicit x/y in '
+      + 'millimetres. The seal image\'s background is knocked out automatically when it has none. '
+      + 'RENDERS an image only: this is not an electronic signature and proves nothing about who '
+      + 'sealed it or whether the document changed afterwards.',
     parameters: {
       pdf_path: { type: 'string', required: true, description: 'The PDF to stamp.' },
-      pages: { type: 'string', description: 'Which pages: "3", "1,4", "2-5", "all", "first", "last". Default "last".' },
+      pages: { type: 'string', description: 'Which pages: "3", "1,4", "2-5", "all", "first", "last". Default: wherever the signature block was found.' },
       seal_path: { type: 'string', description: 'The seal image (PNG with transparency). Defaults to the configured one.' },
-      anchor: { type: 'string', description: `Where on the page: ${anchorNames().join(', ')}. Default bottom-right.` },
+      anchor: { type: 'string', description: `"auto" (default) finds the signature block by reading the document's own words; otherwise one of ${anchorNames().join(', ')}.` },
+      party: { type: 'string', description: 'Whose block to stamp when a contract has several, e.g. "甲方" or "乙方". Only used by anchor "auto".' },
       margin_mm: { type: 'number', description: 'Distance from the anchored edges, in millimetres.' },
       x_mm: { type: 'number', description: 'Explicit position from the left edge; overrides anchor when given with y_mm.' },
       y_mm: { type: 'number', description: 'Explicit position from the bottom edge.' },
@@ -381,6 +424,7 @@ function apply(ctx, config) {
                 xMm: { type: 'number' },
                 yMm: { type: 'number' },
                 pageMm: { type: 'array', items: { type: 'number' } },
+                foundBy: { type: 'string' },
                 overflows: { type: 'array', items: { type: 'string' } },
               },
             },
@@ -392,6 +436,7 @@ function apply(ctx, config) {
           `已盖章:${value.output}`,
           `印章 ${value.seal}(${value.widthMm}×${value.heightMm}mm),共 ${value.stamped.length} 处`,
           ...value.stamped.map(one => `  第 ${one.page} 页 @ (${one.xMm}, ${one.yMm})mm`
+            + (one.foundBy ? ` — 自动定位到「${one.foundBy}」` : '')
             + (isA4(one.pageMm) ? '' : ` — 页面 ${one.pageMm[0]}×${one.pageMm[1]}mm,不是 A4`)
             + (one.overflows ? ` — 超出页面 ${one.overflows.join('、')} 边` : '')),
           ...value.notes,
@@ -407,15 +452,45 @@ function apply(ctx, config) {
       refuseIfSigned(bytes)
       const pdf = await loadPdf(bytes)
       const seal = await sealFor(pdf, args.seal_path, exec)
-      const pages = selectPages(args.pages ?? 'last', pdf.getPageCount())
+      // Auto is the default, and it is the whole point: a fixed corner lands in
+      // white space on a real contract, and often on the wrong page — the
+      // signature block of the agreement this was built against is on page 4
+      // of 5.
+      const explicit = args.x_mm !== undefined && args.y_mm !== undefined
+      const wantsAuto = !explicit && (args.anchor ?? 'auto') === 'auto'
+      const notes = []
+      let spot
+
+      if (wantsAuto) {
+        try {
+          const words = await readWords({ path: pdfTarget.path ?? pdfTarget.displayPath })
+          const candidates = findSealSpots(words, { party: args.party })
+          spot = candidates[0]
+          if (spot === undefined) {
+            notes.push('没能在文档里找到「盖章 / 签章 / 甲方」之类的字样,已退回右下角——请核对位置。')
+          } else if (candidates.length > 1) {
+            notes.push(`共找到 ${candidates.length} 处可盖章位置,选了得分最高的第 ${spot.page} 页「${spot.text}」`
+              + (args.party ? `(限定 ${args.party})` : '') + '。要换位置就指定 pages 与 anchor/坐标。')
+          }
+        } catch (error) {
+          // Missing poppler is a deployment fact, not a document problem: say
+          // it and fall back rather than refusing to stamp at all.
+          notes.push(`自动定位不可用(${String(error.message ?? error)}),已退回右下角。`)
+        }
+      }
+
+      const pages = spot !== undefined
+        ? [spot.page - 1]
+        : selectPages(args.pages ?? 'last', pdf.getPageCount())
 
       const result = await stampPages({
         pdf,
         seal,
         pages,
-        anchor: args.anchor ?? 'bottom-right',
+        anchor: wantsAuto ? 'bottom-right' : (args.anchor ?? 'bottom-right'),
         marginMm: args.margin_mm ?? config.marginMm,
-        ...args.x_mm !== undefined && args.y_mm !== undefined ? { xMm: args.x_mm, yMm: args.y_mm } : {},
+        ...explicit ? { xMm: args.x_mm, yMm: args.y_mm } : {},
+        ...spot !== undefined ? { spot } : {},
         widthMm: args.width_mm ?? config.widthMm,
         heightMm: 0,
         rotation: args.rotation ?? 0,
@@ -425,8 +500,11 @@ function apply(ctx, config) {
       const output = outputPathFor({ input: pdfTarget.displayPath, requested: args.output_path, overwrite: config.overwrite })
       await writeFile(output, await save(pdf))
 
-      const notes = []
-      if (seal.opaque) notes.push('印章是 JPEG,没有透明通道:它会以白底矩形盖住下面的内容。请改用带透明背景的 PNG。')
+      if (seal.opaque) notes.push('印章仍不透明:抠背景被关掉了或没生效,它会盖住下面的内容。')
+      if (seal.knockout?.background) {
+        notes.push(`已自动抠除背景(认出的底色 rgb(${seal.knockout.background.join(',')}),保留 ${(seal.knockout.ratio * 100).toFixed(1)}% 像素)。`)
+        if (seal.knockout.warning) notes.push(seal.knockout.warning)
+      }
       const overflowed = result.stamped.filter(one => one.overflows)
       if (overflowed.length > 0) notes.push(`有 ${overflowed.length} 处超出页面边界,位置未被自动修正——请核对后重盖。`)
       if ((args.rotation ?? 0) !== 0) {

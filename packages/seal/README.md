@@ -54,8 +54,21 @@ Handing a `.docx` straight to a stamp is refused, pointing here.
 seal_stamp(pdf_path, pages="last", anchor="bottom-right", width_mm=40, rotation=-8)
 ```
 
-- **Pages**: `"3"`, `"1,4"`, `"2-5"`, `"all"`, `"first"`, `"last"`. A page named
-  twice is stamped once — seals are semi-transparent, so a double shows.
+- **It finds the position itself** (`anchor: "auto"`, the default): the words
+  and their coordinates are read out of the document, and the seal goes where it
+  says 甲方(盖章) / 签章. A fixed position is wrong on real contracts — on a
+  five-page agreement tested here the signature block is on **page 4**, so
+  "bottom right of the last page" lands in white space. Use `party: "甲方"` when
+  a contract has several signatories; asking for one party **never** lands on
+  the other's line. If nothing is found it falls back to the corner and says so.
+- **The background is knocked out automatically**: a scanned or photographed
+  seal is opaque, and stamping it lays a white card over the clause. The
+  background colour is **detected from the image's border** — white paper, a
+  green screen, a grey scan — and the ink can be any colour. An image that
+  already has transparency is used as-is.
+- **Pages**: `"3"`, `"1,4"`, `"2-5"`, `"all"`, `"first"`, `"last"` (giving them
+  turns the search off). A page named twice is stamped once — seals are
+  semi-transparent, so a double shows.
 - **Position**: a named anchor (`bottom-right`, `bottom-left`, `bottom-center`,
   `top-right`, `top-left`, `center`) with `margin_mm`, or explicit `x_mm` /
   `y_mm` from the bottom-left, like the rest of PDF space.
@@ -205,6 +218,8 @@ certificate is passed per call.
 | `opacity` | `0.9` | real ink lets the text underneath show through |
 | `marginMm` | `20` | distance from the anchored edges |
 | `maxPagesPerSeal` | `20` | largest group one straddle seal may span |
+| `removeBackground` | `true` | knock the background out of the seal image before stamping |
+| `backgroundTolerance` | `40` | how close to the detected background counts as background |
 | `sofficePath` | *(empty)* | LibreOffice binary; empty means search the usual places |
 | `p12Path` | *(empty)* | default signing certificate; a path only, the key stays in that file |
 | `passphraseEnv` | *(empty)* | environment variable holding the passphrase — the preferred route |
