@@ -34,6 +34,9 @@
     "url": "git+https://github.com/huyang218/dsh-plugins.git",
     "directory": "packages/shortcuts"
   },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
   "dsh": {
     "category": "ui/productivity",
     "bundle": { "patch": "./cordis.patch.yml" },

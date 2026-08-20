@@ -35,6 +35,9 @@
   "engines": {
     "node": ">=20"
   },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
   "dsh": {
     "category": "tools/documents",
     "bundle": {
@@ -48,19 +51,19 @@
     }
   },
   "dependencies": {
-    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
     "@signpdf/placeholder-pdf-lib": "^3.3.0",
     "@signpdf/signpdf": "^3.3.0",
     "@signpdf/utils": "^3.3.0",
     "jpeg-js": "^0.4.4",
     "node-forge": "^1.4.0",
-    "pdf-lib": "^1.17.1",
-    "zod": "^4.0.0"
+    "pdf-lib": "^1.17.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "zod": "^4.0.0"
   },
   "exports": {
     ".": {

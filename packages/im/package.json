@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-im",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "description": "Command the agent from a chat app on your phone: a message in Lark, WeCom, DingTalk or QQ drives a real agent turn and the reply comes back to the same chat, with an allowlist that denies by default.",
   "license": "MIT",
   "type": "module",
@@ -35,6 +35,9 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
   },
   "dsh": {
     "category": "runtime/im",
